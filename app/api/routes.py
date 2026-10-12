@@ -18,7 +18,12 @@ from app.analytics.metrics import (
     ratio, sustainability_score, total, to_records, window_payload,
 )
 from app.analytics.repository import location_tree
-from app.analytics.forecast import forecast as build_forecast
+from app.analytics.forecast import (
+    forecast as build_forecast,
+    catalogue as get_forecast_catalogue,
+    accuracy as get_forecast_accuracy,
+    risks as get_forecast_risks,
+)
 from app.api.schemas import dashboard_payload
 from app.config import settings
 from app.db import check_database, get_session, runtime_engine
@@ -316,17 +321,55 @@ class ReplaySpeed(BaseModel):
     speed: float = Field(gt=0)
 
 
+@router.get("/forecast")
+def forecast_catalogue_endpoint(
+    node: str = Query("F01"),
+    as_of: datetime | None = Query(None),
+    session: Session = Depends(get_session),
+):
+    state = replay.load_state(session)
+    cutoff = _normalize_time(as_of) if as_of else _normalize_time(datetime.fromisoformat(state["cursor"]))
+    return {"as_of": cutoff.isoformat(), "targets": get_forecast_catalogue(), "data_source": data_source("system")}
+
+
+@router.get("/forecast/accuracy")
+def forecast_accuracy_endpoint(
+    node: str = Query("F01"),
+    as_of: datetime | None = Query(None),
+    session: Session = Depends(get_session),
+):
+    state = replay.load_state(session)
+    cutoff = _normalize_time(as_of) if as_of else _normalize_time(datetime.fromisoformat(state["cursor"]))
+    return {"as_of": cutoff.isoformat(), "node": node, "targets": get_forecast_accuracy(session=session), "data_source": data_source("system")}
+
+
+@router.get("/forecast/risks")
+def forecast_risks_endpoint(
+    node: str = Query("F01"),
+    as_of: datetime | None = Query(None),
+    session: Session = Depends(get_session),
+):
+    state = replay.load_state(session)
+    cutoff = _normalize_time(as_of) if as_of else _normalize_time(datetime.fromisoformat(state["cursor"]))
+    detected = get_forecast_risks(node, cutoff, session=session)
+    return {"as_of": cutoff.isoformat(), "node": node, "risks": detected, "count": len(detected), "data_source": data_source("system")}
+
+
 @router.get("/forecast/{domain}")
 def forecast_endpoint(
-    domain: Literal["energy", "water", "parking"], node: str = Query("F01"),
-    as_of: datetime | None = Query(None), session: Session = Depends(get_session),
+    domain: str,
+    node: str = Query("F01"),
+    metric: str | None = Query(None),
+    horizon: str = Query("24h"),
+    as_of: datetime | None = Query(None),
+    session: Session = Depends(get_session),
 ):
     state = replay.load_state(session)
     cutoff = _normalize_time(as_of) if as_of else _normalize_time(datetime.fromisoformat(state["cursor"]))
     try:
-        return build_forecast(domain, node, cutoff, session=session)
+        return build_forecast(domain, node, cutoff, session=session, metric=metric, horizon=horizon)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Location node was not found") from exc
+        raise HTTPException(status_code=404, detail="Target or location was not found") from exc
 
 
 @router.get("/replay/state")
