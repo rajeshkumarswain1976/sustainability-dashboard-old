@@ -30,6 +30,7 @@ from app.db import check_database, get_session, runtime_engine
 from app.engine import pipeline, replay
 from app.engine.actions import change_status, list_actions
 from app.sector.config import load_sector_config
+from app import replay_calendar
 
 router = APIRouter()
 IST = ZoneInfo("Asia/Kolkata")
@@ -43,16 +44,45 @@ def _normalize_time(value: datetime) -> datetime:
 
 def request_context(
     node: str = Query("F01"),
-    start: datetime = Query(DEFAULT_START),
-    end: datetime = Query(DEFAULT_END),
+    start: datetime | None = Query(None),
+    end: datetime | None = Query(None),
     as_of: datetime | None = Query(None),
 ) -> dict[str, object]:
-    lower = _normalize_time(start)
-    upper = _normalize_time(end)
-    cutoff = _normalize_time(as_of) if as_of else datetime.now(IST)
+    first, last = replay_calendar.bounds() if replay_calendar.settings.replay_align_today else (DEFAULT_START, DEFAULT_END)
+    lower = _normalize_time(start) if start else first
+    upper = _normalize_time(end) if end else last
+    cutoff = _normalize_time(as_of) if as_of else replay_calendar.now_ist()
     if upper < lower:
         raise HTTPException(status_code=422, detail="end must not be earlier than start")
     return {"node": node, "start": lower, "end": upper, "as_of": cutoff}
+
+
+def _calendar_state(session: Session):
+    state = replay.load_state(session)
+    if not replay_calendar.settings.replay_align_today:
+        return state
+    current_offset = replay_calendar.offset().days
+    previous_offset = state.get("calendar_offset_days")
+    if previous_offset == current_offset:
+        return state
+    if previous_offset is None:
+        current = replay_calendar.now_ist().replace(minute=0, second=0, microsecond=0)
+        state["cursor"] = current.isoformat()
+        state["last_processed_at"] = (current - timedelta(hours=1)).isoformat() if state["running"] else None
+    else:
+        delta = timedelta(days=current_offset - previous_offset)
+        for key in ("cursor", "last_processed_at"):
+            if state.get(key):
+                state[key] = (_normalize_time(datetime.fromisoformat(state[key])) + delta).isoformat()
+    state["calendar_offset_days"] = current_offset
+    replay.save_state(session, state)
+    session.commit()
+    return state
+
+
+@router.get("/replay/calendar")
+def replay_calendar_endpoint():
+    return replay_calendar.payload()
 
 
 def _response_base(domain: str, context: dict[str, object]) -> dict[str, object]:
@@ -327,7 +357,7 @@ def forecast_catalogue_endpoint(
     as_of: datetime | None = Query(None),
     session: Session = Depends(get_session),
 ):
-    state = replay.load_state(session)
+    state = _calendar_state(session)
     cutoff = _normalize_time(as_of) if as_of else _normalize_time(datetime.fromisoformat(state["cursor"]))
     return {"as_of": cutoff.isoformat(), "targets": get_forecast_catalogue(), "data_source": data_source("system")}
 
@@ -338,7 +368,7 @@ def forecast_accuracy_endpoint(
     as_of: datetime | None = Query(None),
     session: Session = Depends(get_session),
 ):
-    state = replay.load_state(session)
+    state = _calendar_state(session)
     cutoff = _normalize_time(as_of) if as_of else _normalize_time(datetime.fromisoformat(state["cursor"]))
     return {"as_of": cutoff.isoformat(), "node": node, "targets": get_forecast_accuracy(node=node, as_of=cutoff, session=session), "data_source": data_source("system")}
 
@@ -349,7 +379,7 @@ def forecast_risks_endpoint(
     as_of: datetime | None = Query(None),
     session: Session = Depends(get_session),
 ):
-    state = replay.load_state(session)
+    state = _calendar_state(session)
     cutoff = _normalize_time(as_of) if as_of else _normalize_time(datetime.fromisoformat(state["cursor"]))
     detected = get_forecast_risks(node, cutoff, session=session)
     return {"as_of": cutoff.isoformat(), "node": node, "risks": detected, "count": len(detected), "data_source": data_source("system")}
@@ -364,8 +394,10 @@ def forecast_endpoint(
     as_of: datetime | None = Query(None),
     session: Session = Depends(get_session),
 ):
-    state = replay.load_state(session)
+    state = _calendar_state(session)
     cutoff = _normalize_time(as_of) if as_of else _normalize_time(datetime.fromisoformat(state["cursor"]))
+    if as_of is None and domain == "weather" and replay_calendar.settings.replay_align_today and not state["running"]:
+        cutoff = replay_calendar.now_ist()
     try:
         return build_forecast(domain, node, cutoff, session=session, metric=metric, horizon=horizon)
     except ValueError as exc:
@@ -376,13 +408,16 @@ def forecast_endpoint(
 
 @router.get("/replay/state")
 def replay_state(session: Session = Depends(get_session)):
-    return replay.load_state(session)
+    return _calendar_state(session)
 
 
 @router.post("/replay/start")
 def replay_start(command: ReplayStart | None = None, session: Session = Depends(get_session)):
     values = command or ReplayStart()
-    return replay.start(session, values.as_of, values.speed, values.node)
+    state = _calendar_state(session)
+    target = values.as_of or (_normalize_time(datetime.fromisoformat(state["cursor"]))
+                              if replay_calendar.settings.replay_align_today else None)
+    return replay.start(session, target, values.speed, values.node)
 
 
 @router.post("/replay/pause")
@@ -392,11 +427,13 @@ def replay_pause(session: Session = Depends(get_session)):
 
 @router.post("/replay/seek")
 def replay_seek(command: ReplaySeek, session: Session = Depends(get_session)):
+    _calendar_state(session)
     return replay.seek(session, command.as_of)
 
 
 @router.post("/replay/speed")
 def replay_speed(command: ReplaySpeed, session: Session = Depends(get_session)):
+    _calendar_state(session)
     return replay.set_speed(session, command.speed)
 
 
@@ -405,7 +442,7 @@ def alerts(
     since: datetime | None = Query(None), as_of: datetime | None = Query(None),
     node: str = Query("F01"), session: Session = Depends(get_session),
 ):
-    state = replay.load_state(session)
+    state = _calendar_state(session)
     cutoff = _normalize_time(as_of) if as_of else _normalize_time(datetime.fromisoformat(state["cursor"]))
     beginning = _normalize_time(since) if since else None
     return {"as_of": cutoff.isoformat(), "alerts": pipeline.list_alerts(session, beginning, cutoff, node),
@@ -457,12 +494,13 @@ def stream(
 
     def next_step():
         with DbSession(engine) as db:
-            state = replay.load_state(db)
+            state = _calendar_state(db)
             if not state["running"]:
                 return None
             previous = state.get("last_processed_at") or state["cursor"]
             target = _normalize_time(datetime.fromisoformat(previous)) + timedelta(hours=1)
-            if target > DEFAULT_END:
+            last = replay_calendar.bounds()[1] if replay_calendar.settings.replay_align_today else DEFAULT_END
+            if target > last:
                 replay.pause(db)
                 return None
             return target, float(state["speed"])

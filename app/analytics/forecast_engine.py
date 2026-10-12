@@ -24,6 +24,7 @@ from app.analytics.metrics import data_source, sustainability_score as calc_sust
 from app.analytics.repository import fetch_frame
 from app.db import ensure_forecast_tables, get_table
 from app.sector.config import load_sector_config
+from app import replay_calendar
 
 TZ = ZoneInfo("Asia/Kolkata")
 
@@ -118,11 +119,16 @@ def _as_ist(dt: datetime) -> datetime:
 # Climatology & Weather Forecasting
 # =========================================================================
 
-def forecast_weather(db: Session, as_of: datetime, horizon_hours: int = 24) -> pd.DataFrame:
+def forecast_weather(db: Session, as_of: datetime, horizon_hours: int = 24, *, use_api: bool = False) -> pd.DataFrame:
     """Climatology (hour-of-day mean of last 14 days) blended with persistence.
     Returns DataFrame indexed by forecast timestamp with columns:
     temperature, humidity, rainfall, wind_speed.
     """
+    if use_api:
+        from app.analytics.weather_api import forecast as api_forecast
+        supplied = api_forecast(as_of, horizon_hours)
+        if supplied is not None:
+            return supplied
     cutoff = hour(as_of)
     start_14d = cutoff - timedelta(days=14)
     raw = fetch_frame(db, "weather", "F01", start_14d, cutoff, cutoff)
@@ -559,7 +565,8 @@ def fit_and_serve_global_model(
 ) -> dict[str, Any]:
     cutoff = hour(as_of)
     bind_key = db.get_bind()
-    cache_key = (bind_key, target_id, metric, node, cutoff.isoformat(), model_cls)
+    calendar_days = replay_calendar.offset().days
+    cache_key = (bind_key, target_id, metric, node, cutoff.isoformat(), model_cls, calendar_days)
     cached = _GLOBAL_MODEL_CACHE.get(cache_key)
     if cached is not None:
         return deepcopy(cached)
@@ -594,7 +601,7 @@ def fit_and_serve_global_model(
     holidays = {str(day) for day in load_sector_config().get("holidays", [])}
 
     train_end = cutoff.replace(hour=0)
-    train_key = (bind_key, target_id, metric, train_end.date(), model_cls)
+    train_key = (bind_key, target_id, metric, train_end.date(), model_cls, calendar_days)
     trained = _TRAINED_MODEL_CACHE.get(train_key)
     if trained is None:
         train_series = {ent: s[s.index <= train_end] for ent, s in series_map.items()}
@@ -752,7 +759,7 @@ def fit_and_serve_global_model(
                 target=target_id,
                 trained_at=cutoff,
                 train_end=train_end,
-                params={"node": node, "horizon": "24h", "served_model": eval_res["served_model"],
+                params={"node": node, "horizon": "24h", "replay_offset_days": calendar_days, "served_model": eval_res["served_model"],
                         "mae": eval_res["overall_mae"], "baseline_mae": eval_res["best_baseline_mae"],
                         "smape": eval_res["overall_smape"], "fold_results": eval_res["fold_results"],
                         "max_iter": 60, "max_leaf_nodes": 15, "categorical_features": [0]}

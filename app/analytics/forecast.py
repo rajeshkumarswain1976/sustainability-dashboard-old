@@ -11,6 +11,7 @@ from app.analytics.metrics import data_source
 from app.analytics.repository import resolve_scope
 from app.analytics import forecast_engine
 from app.db import ensure_forecast_tables, get_table
+from app import replay_calendar
 
 # Cache invalidation remains compatible with replay test fixtures.
 class ModelCacheDict(dict):
@@ -72,7 +73,9 @@ def forecast(
         elif domain == "air":
             res = forecast_engine.forecast_air_domain(db, node, cutoff, metric=metric or "aqi_cpcb")
         elif domain == "weather":
-            fw = forecast_engine.forecast_weather(db, cutoff, horizon_hours=24 if horizon == "24h" else 168 + 23 - cutoff.hour)
+            fw = forecast_engine.forecast_weather(db, as_of, horizon_hours=24 if horizon == "24h" else 168 + 23 - cutoff.hour, use_api=True)
+            source_meta = dict(fw.attrs)
+            weather_model = "weather_api" if source_meta.get("provider") == "open-meteo" else "formula"
             if horizon == "7d":
                 fw = fw[fw.index.date > cutoff.date()]
                 aggregation = "sum" if metric == "rainfall" else "mean"
@@ -84,13 +87,15 @@ def forecast(
             res = {
                 "domain": "weather",
                 "node": node,
-                "as_of": cutoff.isoformat(),
-                "model": "formula",
+                "as_of": source_meta.get("issued_at", cutoff.isoformat()),
+                "data_cutoff": cutoff.isoformat(),
+                "model": weather_model,
                 "mae": None,
                 "baseline_mae": None,
                 "series": series_rows,
-                "forecasts": [{"entity_id": "F01", "model": "formula", "mae": None, "baseline_mae": None, "series": series_rows}],
-                "data_source": data_source("weather"),
+                "forecasts": [{"entity_id": "F01", "model": weather_model, "mae": None, "baseline_mae": None, "series": series_rows}] if series_rows else [],
+                "data_source": {"mode": "weather_forecast", "classification": "api_weather_forecast", "provider": "open-meteo", "location": "Delhi"}
+                               if weather_model == "weather_api" else data_source("weather"),
             }
         elif domain == "climate":
             res = forecast_engine.forecast_climate_domain(db, node, cutoff)
@@ -124,7 +129,8 @@ def forecast(
 
         res["horizon"] = "7d" if domain == "sustainability" or (domain == "safety" and metric != "risk_index") else horizon
         if "target" not in res:
-            _persist_derived_forecasts(db, canonical_domain, node, cutoff, metric, res)
+            issued = datetime.fromisoformat(res["as_of"]) if domain == "weather" and weather_model == "weather_api" else cutoff
+            _persist_derived_forecasts(db, canonical_domain, node, issued, metric, res)
 
         # Top-level convenience properties when single forecast or entity
         if res.get("forecasts") and len(res["forecasts"]) >= 1:
@@ -163,7 +169,8 @@ def _persist_derived_forecasts(db, domain: str, node: str, cutoff: datetime,
             identifier = f"{target['id']}|{cutoff.isoformat()}|{node}|{horizon}"
             db.execute(delete(models).where(models.c.model_id == identifier))
             db.execute(insert(models).values(model_id=identifier, target=target["id"], trained_at=cutoff,
-                train_end=cutoff, params={"node": node, "horizon": horizon, "served_model": served, "mae": None,
+                train_end=cutoff, params={"node": node, "horizon": horizon, "replay_offset_days": replay_calendar.offset().days,
+                                         "served_model": served, "mae": None,
                                          "baseline_mae": None, "smape": None, "fold_results": []}))
             updated.add(target["id"])
     if rows:
@@ -193,17 +200,19 @@ def accuracy_at(node: str = "F01", as_of: datetime | None = None, session=None) 
         if models is not None and inspect(db.get_bind()).has_table("forecast_models"):
             query = select(models).order_by(models.c.trained_at.desc(), models.c.model_id.desc())
             if as_of is not None:
-                query = query.where(models.c.trained_at <= hour(as_of))
+                query = query.where(models.c.trained_at <= forecast_engine._as_ist(as_of))
             stored = list(db.execute(query).mappings())
         for target in catalogue():
             candidates = [value for key, value in forecast_engine._GLOBAL_MODEL_CACHE.items()
                           if key[0] is db.get_bind() and value.get("target") == target["id"]
+                          and key[-1] == replay_calendar.offset().days
                           and value.get("node") == node
                           and (as_of is None or value.get("as_of") == hour(as_of).isoformat())]
             cached = max(candidates, key=lambda value: value["as_of"]) if candidates else None
             if cached is None:
                 records = [row for row in stored if row["target"] == target["id"] and
-                           (row["params"] or {}).get("node") == node]
+                           (row["params"] or {}).get("node") == node and
+                           (row["params"] or {}).get("replay_offset_days", 0) == replay_calendar.offset().days]
                 record = next((row for row in records if (row["params"] or {}).get("fold_results")),
                               next(iter(records), None))
                 if record:

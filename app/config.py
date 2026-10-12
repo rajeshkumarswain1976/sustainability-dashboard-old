@@ -29,6 +29,10 @@ class Settings:
     decision_provider: str = os.getenv("DECISION_PROVIDER", "jev").strip().lower()
     decision_on_error: str = os.getenv("DECISION_ON_ERROR", "needs_review").strip().lower()
     frontend_origin: str = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
+    replay_align_today: bool = os.getenv("REPLAY_ALIGN_TODAY", "false").lower() == "true"
+    weather_forecast_enabled: bool = os.getenv("WEATHER_FORECAST_ENABLED", "false").lower() == "true"
+    weather_latitude: float = float(os.getenv("WEATHER_LATITUDE", "28.65195"))
+    weather_longitude: float = float(os.getenv("WEATHER_LONGITUDE", "77.23149"))
 
     @property
     def data_dir(self) -> Path:

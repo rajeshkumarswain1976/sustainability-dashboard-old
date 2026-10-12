@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import DOMAIN_TABLES, get_table
+from app import replay_calendar
 
 DIMENSIONS = {
     "facility": "facility_id",
@@ -88,8 +89,9 @@ def fetch_frame(
     if table is None:
         return pd.DataFrame()
     scope, target = resolve_scope(session, node)
-    lower = _ist(start)
-    upper = min(_ist(end), _ist(as_of))
+    calendar_offset = replay_calendar.offset()
+    lower = _ist(start) - calendar_offset
+    upper = min(_ist(end), _ist(as_of)) - calendar_offset
     statement = select(table)
     level = str(target.get("level") or "facility").lower()
     # The location-level environmental layers apply to every child node.
@@ -119,14 +121,18 @@ def fetch_frame(
     if frame.empty:
         return frame
     # SQLite returns naive timestamps; preserve the API's IST contract.
-    for column in ("timestamp", "timestamp_start", "timestamp_end", "date"):
+    time_columns = {"timestamp", "timestamp_start", "timestamp_end", "date", "predicted_overflow_time",
+                    "collection_time", "last_collection_time"}
+    for column in frame:
+        if column not in time_columns and not column.endswith("_date") and not column.endswith("_timestamp"):
+            continue
         if column in frame:
             parsed = pd.to_datetime(frame[column], errors="coerce")
             if parsed.dt.tz is None:
                 parsed = parsed.dt.tz_localize("Asia/Kolkata")
             else:
                 parsed = parsed.dt.tz_convert("Asia/Kolkata")
-            frame[column] = parsed
+            frame[column] = parsed + calendar_offset
     return frame
 
 
