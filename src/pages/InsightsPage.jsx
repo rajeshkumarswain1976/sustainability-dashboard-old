@@ -1,3 +1,4 @@
+import ForecastPanel, { ForecastAccuracyPanel } from '../components/ForecastPanel';
 import React, { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { USE_MOCK } from '../services/client';
@@ -50,6 +51,8 @@ export default function InsightsPage() {
 
   return (
     <div className="space-y-6">
+      {!USE_MOCK && <ForecastAccuracyPanel />}
+
       {/* Page Header */}
       <div>
         <div className="text-xs font-mono text-dark-400 mb-1">
@@ -275,6 +278,8 @@ export default function InsightsPage() {
 
         {/* This Week's Signal */}
         <div className="bg-[#14151B] border border-[#22242E] rounded-2xl p-6 shadow-card-dark flex flex-col justify-between">
+{!USE_MOCK ? <ForecastPanel domain="energy" compact /> : <>
+
           <div>
             <div className="flex justify-between items-center mb-1">
               <span className="text-[10px] font-semibold text-dark-400 uppercase tracking-wider">
@@ -318,7 +323,9 @@ export default function InsightsPage() {
               <span className="text-[11px] text-dark-500 font-mono">Logged to signal registry</span>
             )}
           </div>
-        </div>
+
+</>}
+</div>
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import ForecastPanel from '../components/ForecastPanel';
 import React, { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { USE_MOCK } from '../services/client';
@@ -85,6 +86,8 @@ export default function SafetyPage({ setCurrentPage }) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Incident Activity Chart (7 cols) */}
         <div className="lg:col-span-7 bg-[#14151B] border border-[#22242E] rounded-2xl p-5 shadow-card-dark flex flex-col justify-between">
+{!USE_MOCK ? <ForecastPanel domain="safety" compact /> : <>
+
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
@@ -143,7 +146,9 @@ export default function SafetyPage({ setCurrentPage }) {
             <span>Today · Fri 9 Oct (dashed = forecast)</span>
             <span className="text-[11px] font-mono">Median response: 2.4 h</span>
           </div>
-        </div>
+
+</>}
+</div>
 
         {/* Hotspots (5 cols) */}
         <div className="lg:col-span-5 bg-[#14151B] border border-[#22242E] rounded-2xl p-5 shadow-card-dark flex flex-col justify-between">

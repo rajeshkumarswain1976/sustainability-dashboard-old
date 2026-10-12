@@ -1,3 +1,4 @@
+import ForecastPanel from '../components/ForecastPanel';
 import React, { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { USE_MOCK } from '../services/client';
@@ -136,6 +137,8 @@ export default function WastePage({ setCurrentPage }) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Collection Performance (7 cols) */}
         <div className="lg:col-span-7 bg-[#14151B] border border-[#22242E] rounded-2xl p-5 shadow-card-dark flex flex-col justify-between">
+{!USE_MOCK ? <ForecastPanel domain="waste" compact /> : <>
+
           <div>
             <div className="flex items-center justify-between mb-3">
               <div>
@@ -183,7 +186,9 @@ export default function WastePage({ setCurrentPage }) {
             </div>
             <span className="text-[10px] text-dark-400 font-mono">Fill forecast · 78% confidence</span>
           </div>
-        </div>
+
+</>}
+</div>
 
         {/* Waste by Stream (5 cols) */}
         <div className="lg:col-span-5 bg-[#14151B] border border-[#22242E] rounded-2xl p-5 shadow-card-dark flex flex-col justify-between">

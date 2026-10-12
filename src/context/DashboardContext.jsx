@@ -350,6 +350,7 @@ export function DashboardProvider({ children }) {
         updateFilter,
         resetFilters,
         dashboardData,
+        forecastScope: { node, as_of: effectiveAsOf },
         locations,
         replayState,
         setReplayState,

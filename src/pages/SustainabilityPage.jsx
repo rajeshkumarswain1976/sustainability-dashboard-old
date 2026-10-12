@@ -1,3 +1,4 @@
+import ForecastPanel from '../components/ForecastPanel';
 import React, { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { USE_MOCK } from '../services/client';
@@ -47,6 +48,8 @@ export default function SustainabilityPage() {
 
   return (
     <div className="space-y-6">
+      {!USE_MOCK && <ForecastPanel domain="sustainability" title="Seven-day score projection" />}
+
       {/* Page Header */}
       <div>
         <div className="text-xs font-mono text-dark-400 mb-1">

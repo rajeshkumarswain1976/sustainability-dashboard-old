@@ -1,3 +1,4 @@
+import ForecastPanel from '../components/ForecastPanel';
 import React, { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { USE_MOCK } from '../services/client';
@@ -110,6 +111,8 @@ export default function AssetsPage({ setCurrentPage }) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Trend Chart (7 cols) */}
         <div className="lg:col-span-7 bg-[#14151B] border border-[#22242E] rounded-2xl p-5 shadow-card-dark flex flex-col justify-between">
+{!USE_MOCK ? <ForecastPanel domain="assets" compact /> : <>
+
           <div>
             <div className="flex items-center justify-between mb-2">
               <div>
@@ -153,7 +156,9 @@ export default function AssetsPage({ setCurrentPage }) {
             </div>
           </div>
           <div className="mt-2 text-xs text-dark-400">Today · Fri 9 Oct (dashed = forecast)</div>
-        </div>
+
+</>}
+</div>
 
         {/* Portfolio Health (5 cols) */}
         <div className="lg:col-span-5 bg-[#14151B] border border-[#22242E] rounded-2xl p-5 shadow-card-dark flex flex-col justify-between">

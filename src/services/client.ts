@@ -59,6 +59,10 @@ async function request<T>(path: string, query?: object,
 }
 
 export const api = {
+  forecast: (domain: string, query: { node: string; as_of: string; metric?: string; horizon?: string }) =>
+    request<ForecastResponse>(`forecast/${domain}`, query),
+  forecastAccuracy: (query: { node: string; as_of: string }) => request<{ targets: ForecastAccuracy[] }>('forecast/accuracy', query),
+  forecastRisks: (query: { node: string; as_of: string }) => request<{ risks: ForecastRisk[] }>('forecast/risks', query),
   dashboard: (window: QueryWindow) => request<DashboardPayload>('dashboard', window),
   locations: () => request<{ locations: Location[] }>('locations'),
   alerts: (query: { node?: string; since?: string; as_of?: string }) => request<{ as_of: string; alerts: Alert[] }>('alerts', query),
@@ -76,3 +80,13 @@ export const api = {
     undefined, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'X-Role': role }, body: JSON.stringify({ status }) }),
   streamUrl: (query: { node: string; as_of?: string }) => url('stream', query),
 };
+
+export type ForecastPoint = { timestamp: string; value: number; lower: number; upper: number; parking_percent?: number };
+export type ForecastResponse = { domain: string; as_of: string; node: string; projection?: boolean; projection_basis?: string;
+  days_of_water_available?: number | null; unit?: string;
+  data_source: { mode: string; classification: string };
+  forecasts: { entity_id: string; metric?: string; model: string; mae: number | null; baseline_mae: number | null;
+    series: ForecastPoint[]; predicted_overflow_time?: string | null }[] };
+export type ForecastAccuracy = { target: string; served_model: string | null; mae: number | null;
+  baseline_mae: number | null; smape: number | null; status: string; folds: { band_coverage?: number }[] };
+export type ForecastRisk = { type: string; node: string; domain: string; predicted_time: string; lead_time_hours: number };

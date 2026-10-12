@@ -1,3 +1,4 @@
+import { ForecastRisksPanel } from '../components/ForecastPanel';
 import React, { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { USE_MOCK } from '../services/client';
@@ -67,6 +68,8 @@ export default function OverviewPage() {
 
   return (
     <div className="space-y-6">
+      {!USE_MOCK && <ForecastRisksPanel />}
+
       {/* Title & Headline */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>

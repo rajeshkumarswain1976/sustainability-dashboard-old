@@ -1,3 +1,5 @@
+import { USE_MOCK } from '../services/client';
+import ForecastPanel from '../components/ForecastPanel';
 import React, { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { 
@@ -28,6 +30,8 @@ export default function ClimatePage({ setCurrentPage }) {
 
   return (
     <div className="space-y-6">
+      {!USE_MOCK && <ForecastPanel domain="weather" title="Weather outlook" />}
+
       {/* Page Header */}
       <div>
         <div className="text-xs font-mono text-dark-400 mb-1">
@@ -143,6 +147,8 @@ export default function ClimatePage({ setCurrentPage }) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Outlook Chart (7 cols) */}
         <div className="lg:col-span-7 bg-[#14151B] border border-[#22242E] rounded-2xl p-5 shadow-card-dark flex flex-col justify-between">
+{!USE_MOCK ? <ForecastPanel domain="climate" compact /> : <>
+
           <div>
             <div className="flex justify-between items-center mb-2">
               <div>
@@ -181,7 +187,9 @@ export default function ClimatePage({ setCurrentPage }) {
             <span>Tue 13</span>
             <span>Wed 14</span>
           </div>
-        </div>
+
+</>}
+</div>
 
         {/* Weather Watch (5 cols) */}
         <div className="lg:col-span-5 bg-[#1F1716] border border-[#44221D] rounded-2xl p-5 shadow-card-dark flex flex-col justify-between">

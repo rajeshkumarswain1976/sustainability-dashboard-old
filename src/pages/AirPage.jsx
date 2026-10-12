@@ -1,3 +1,5 @@
+import { USE_MOCK } from '../services/client';
+import ForecastPanel from '../components/ForecastPanel';
 import React, { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { 
@@ -52,6 +54,8 @@ export default function AirPage({ setCurrentPage }) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Chart Column (8 cols) */}
         <div className="lg:col-span-8 bg-[#14151B] border border-[#22242E] rounded-2xl p-5 shadow-card-dark flex flex-col justify-between">
+{!USE_MOCK ? <ForecastPanel domain="air" compact /> : <>
+
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
               <div>
@@ -131,7 +135,9 @@ export default function AirPage({ setCurrentPage }) {
             <span>Today · Fri 9 Oct (dashed = forecast)</span>
             <span className="font-mono">Observed AQI · Next-day estimate 47 · Updated 10:00</span>
           </div>
-        </div>
+
+</>}
+</div>
 
         {/* Current Reading Hero Card (4 cols) */}
         <div className="lg:col-span-4 bg-[#14151B] border border-[#22242E] rounded-2xl p-5 shadow-card-dark flex flex-col justify-between">

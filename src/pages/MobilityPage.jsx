@@ -1,3 +1,4 @@
+import ForecastPanel from '../components/ForecastPanel';
 import React, { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { USE_MOCK } from '../services/client';
@@ -68,6 +69,8 @@ export default function MobilityPage({ setCurrentPage }) {
         
         {/* 01 / TRAFFIC Vehicle flow */}
         <div className="bg-[#14151B] border border-[#22242E] rounded-2xl p-5 shadow-card-dark flex flex-col justify-between space-y-4">
+{!USE_MOCK ? <ForecastPanel domain="mobility" compact /> : <>
+
           <div>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -158,7 +161,9 @@ export default function MobilityPage({ setCurrentPage }) {
               <span className="text-rose-400 font-semibold">North Garage reaches 88% by 09:40</span>
             </div>
           </div>
-        </div>
+
+</>}
+</div>
 
         {/* 02 / PARKING Space utilisation */}
         <div className="bg-[#14151B] border border-[#22242E] rounded-2xl p-5 shadow-card-dark flex flex-col justify-between space-y-4">

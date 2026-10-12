@@ -1,3 +1,4 @@
+import ForecastPanel from '../components/ForecastPanel';
 import React, { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { USE_MOCK } from '../services/client';
@@ -43,6 +44,8 @@ export default function WaterPage() {
 
   return (
     <div className="space-y-6">
+      {!USE_MOCK && <ForecastPanel domain="water" defaultMetric="tank_level_pct" title="Tank forecast and water runway" />}
+
       {/* Page Header */}
       <div>
         <div className="text-xs font-mono text-dark-400 mb-1">
@@ -153,6 +156,8 @@ export default function WaterPage() {
       {/* Middle Grid: Demand Curve Chart & Tank Levels */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         <div className="lg:col-span-7 bg-[#14151B] border border-[#22242E] rounded-2xl p-5 shadow-card-dark flex flex-col justify-between">
+{!USE_MOCK ? <ForecastPanel domain="water" compact /> : <>
+
           <div>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -212,10 +217,12 @@ export default function WaterPage() {
             </div>
           </div>
 
-          <div className="mt-3 p-3 bg-[#191B24] border border-[#262835] rounded-xl text-xs text-dark-300">
+          {USE_MOCK && (          <div className="mt-3 p-3 bg-[#191B24] border border-[#262835] rounded-xl text-xs text-dark-300">
             <span className="text-emerald-400 font-semibold">Forecast:</span> demand is expected to ease to 1,248 m³/day by Friday; supply remains within operating reserve.
-          </div>
-        </div>
+          </div>)}
+
+</>}
+</div>
 
         {/* Tank Levels */}
         <div className="lg:col-span-5 bg-[#14151B] border border-[#22242E] rounded-2xl p-5 shadow-card-dark flex flex-col justify-between">

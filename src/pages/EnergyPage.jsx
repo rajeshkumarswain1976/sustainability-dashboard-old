@@ -1,3 +1,4 @@
+import ForecastPanel, { ForecastRisksPanel } from '../components/ForecastPanel';
 import React, { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { USE_MOCK } from '../services/client';
@@ -40,6 +41,8 @@ export default function EnergyPage() {
 
   return (
     <div className="space-y-6">
+      {!USE_MOCK && <ForecastPanel domain="emissions" title="Projected CO?e" />}
+
       {/* Page Header */}
       <div>
         <div className="text-xs font-mono text-dark-400 mb-1">
@@ -136,6 +139,8 @@ export default function EnergyPage() {
         {/* Left Column (8 cols): Trend Chart + Live Demand by Building */}
         <div className="lg:col-span-8 space-y-5">
           <div className="bg-[#14151B] border border-[#22242E] rounded-2xl p-5 shadow-card-dark">
+{!USE_MOCK ? <ForecastPanel domain="energy" compact /> : <>
+
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
               <div>
                 <div className="flex items-center gap-2">
@@ -202,7 +207,9 @@ export default function EnergyPage() {
                 <span>Forecast +2d</span>
               </div>
             </div>
-          </div>
+
+</>}
+</div>
 
           {/* Where Energy is Going */}
           <div className="bg-[#14151B] border border-[#22242E] rounded-2xl p-5 shadow-card-dark">
@@ -241,6 +248,7 @@ export default function EnergyPage() {
 
         {/* Right Column (4 cols): Signals, Next Steps, Policy */}
         <div className="lg:col-span-4 space-y-5">
+          {!USE_MOCK ? <ForecastRisksPanel domain="energy" /> : <>
           {/* Signal Detected Card */}
           <div className="bg-[#14151B] border border-[#22242E] rounded-2xl p-5 shadow-card-dark">
             <div className="flex items-center justify-between mb-2">
@@ -280,6 +288,7 @@ export default function EnergyPage() {
             )}
           </div>
 
+          </>}
           {/* Recommended Next Step Card */}
           <div className="bg-[#14151B] border border-[#22242E] rounded-2xl p-5 shadow-card-dark space-y-4">
             <div>
