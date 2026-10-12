@@ -12,6 +12,14 @@ responses are validated against the official pinned-model contract; rules emit m
 No forecasting implementation was rewritten. Existing full-forecast acceptance gaps remain
 outside this Phase 3 scope. Tests and final live-check results are in PHASE3_STATUS.md.
 
+Final backend regression: 89 tests pass, including every existing Phase 1/2/forecast test and
+the Phase 3 scope/decision/pipeline/restart/score regressions. Read-only metadata audit verifies
+alerts, actions, decision_log, complaints and the three forecast tables in local SQLite and
+PostgreSQL. needs_review is represented by alert status/action payload and API fields. No
+schema or source-row changes were needed in this final resume. Typed factor scores preserve
+missing values and source precision. Live Jev/rules calibration remains not_evaluated because
+stored paired live samples are absent; the requested Jev regression tests are mocked.
+
 # Resumed Phase 3 — active setup (2026-10-12)
 
 The running frontend is now `C:/Users/HP/Desktop/sustainability-dashboard/src/`; the backend,
@@ -26,9 +34,9 @@ operational/forecast tables. Local alerts contains level, confidence, facts, sev
 needs_review is represented by alert status and action payload, not an invented sensor column.
 Actions, decision_log and complaints stubs already exist. No table was dropped or recreated.
 
-The earlier claims that the active UI has replay/SSE/actions integration are stale after the
-frontend folder split. The current analytics cards and combined trend charts are connected;
-the location selector remains flat and the Actions/Decision queue remains illustrative.
+After the frontend folder split, replay/SSE/actions integration was restored in the active
+workspace. Analytics cards, combined trend charts, the searchable location tree, Actions and
+Decision queue now use the backend. Mock fixtures are retained behind VITE_USE_MOCK=true.
 See PHASE3_STATUS.md for the ordered completion plan and verified item status. The older
 audit sections below are historical records, not claims about the current implementation.
 

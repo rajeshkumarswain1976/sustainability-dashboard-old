@@ -36,11 +36,11 @@ The existing page/widget table below defines exact empty values and fields pendi
 | Location dropdown | `GET /locations` | `{window,data_source,locations: Location[]}`, `Location={node_id:string,level:string,parent_id:string|null,label:string,zone_id:string|null,building_id:string|null,floor_id:string|null,sort_order:number|null,data_source:string}`. The selected label maps to `node_id`. |
 | Period/date | `GET /dashboard?node=&start=&end=&as_of=` | `window={node,start,end,as_of,effective_end}`. `period` chooses start/end; snapshot date chooses `as_of`. |
 | Replay picker | `GET /replay/state`, `POST /replay/start` `{node,as_of?,speed?}`, `/pause`, `/seek` `{as_of}`, `/speed` `{speed}` | `ReplayState={running:boolean,speed:number,cursor:string,last_processed_at:string|null,node:string}`. |
-| Bell, popup, Alerts/decision queue | `GET /alerts?node=&since=&as_of=`, `GET /decisions/queue?node=&as_of=`, `GET /stream?node=` | `Alert={alert_key,alert_id,created_at,node,domain,type,level:Info|Warning|Critical|null,status,confidence:number|null,facts:{observations,context}}`. SSE `tick` data `{as_of,ticks,new_alerts}`; reconnect reads `/alerts?since=` and deduplicates by `alert_key`. Queue is `{as_of,items:Alert[],count,data_source}`. |
+| Bell, popup, Alerts/decision queue | `GET /alerts?node=&since=&as_of=`, `GET /decisions/queue?node=&as_of=`, `GET /stream?node=` | `Alert={alert_key,alert_id,created_at,node,domain,type,level:Info|Warning|Critical|null,status,confidence:number|null,facts:{observations,context}}`. SSE `tick` data `{as_of,ticks,new_alerts}`; reconnect reads `/alerts?since=` and deduplicates by stable `alert_id`. Queue is `{as_of,items:Alert[],count,data_source}`. |
 | Shared sustainability score and alert counts | `GET /dashboard` | `overview.score:number`, `sustainability.score:number` are the same value; `overview.alertCounts={open:number,critical:number,needsReview:number}` and the bell use the same alert rows at `as_of`. |
 | Action queue | `GET /actions?node=&as_of=`, `PATCH /actions/{id}` body `{status}` and `X-Role: staff|head` | `{as_of,actions:Action[],data_source}`; `Action={id,alert_key,type,node,text,saving_inr:number,saving_co2e:number,priority:number|null,owner:string|null,status:open|acknowledged|in_progress|done,needs_head_approval:boolean,needs_review:boolean,source:rule|agent,created_at:string}`. |
 
-The Alerts page renders the same `Alert[]` and `overview.alertCounts` as the header bell and Overview panel. The Actions page renders the same `Action[]` returned by `/actions`, with status progression in its existing queue layout.
+The notification drawer and Overview panel render the same `Alert[]` and `overview.alertCounts` as the header bell. The Actions page renders the same `Action[]` returned by `/actions`, with status progression in its existing queue layout; staff cannot finish a head-gated action.
 
 Every `/dashboard` response also includes `window` and `data_source={mode,classification}`. No sensor readings are described as live IoT.
 
@@ -48,7 +48,7 @@ Every `/dashboard` response also includes `window` and `data_source={mode,classi
 
 | Page/widgets | Exact `/dashboard` JSON fields and units | Pending shaped value |
 | --- | --- | --- |
-| Overview score, trend, factor cards | `overview={score:number (0–100),delta:number (points),trend:string,factors:[{name:string,score:number,status:string,color:string,page:string}],complaints:{open:number,overdue:number},utilization:{classrooms:number,labs:number,hostels:number},alertCounts:{open:number,critical:number,needsReview:number}}` | Complaint counts are `0` pending Phase 4 complaint ingestion. `delta=0` until prior-period comparison is implemented. |
+| Overview score, trend, factor cards | `overview={score:number (0–100),delta:number (points),trend:string,factors:[{name:string,score:number|null,status:string,color:string,page:string,source:string,source_column:string}],complaints:{open:number,overdue:number},utilization:{classrooms:number,labs:number,hostels:number},alertCounts:{open:number,critical:number,needsReview:number}}` | Missing factor scores are null; no rounding or invented zero. Complaint counts are `0` pending Phase 4 ingestion. `delta=0` until prior-period comparison is implemented. |
 | Energy cards and building bars | `energy={currentDemandKw:number,deltaVsPrevWeek:number,electricityMwh:number,peakDemandKw:number,estimatedEmissionsTco2e:number,avoidedTco2e:number,buildings:[{name:string,kw:number,percent:number}],monthlySavingRs:number,savingMwh:number}` | `deltaVsPrevWeek=0`, `avoidedTco2e=0`, `savingMwh=0` pending Phase 4 simulation. |
 | Water cards and tanks | `water={useTodayM3:number,deltaAvg:number,dailySupplyM3:number,storedReservePercent:number,intensityLPerPerson:number,leakAnomalyDelta:string,weeklySavingRs:number,tanks:[{name:string,percent:number}]}` | `deltaAvg=0`, `dailySupplyM3=0`, `leakAnomalyDelta=""` pending Phase 4 comparison/supply model. |
 | Waste cards and streams | `waste={generatedTonnes:number,deltaVsLastWeek:number,collectedOnSchedulePercent:number,overflowIncidents:number,diversionRatePercent:number,streams:[{name:string,tonnage:number,width:string}],routeSavingRsWeekly:number}` | Comparison and route saving fields are `0` pending Phase 4 simulation. |
@@ -113,6 +113,18 @@ Operational forecasts continue using dataset-only inputs. Current-date defaults 
 Provider contract: https://open-meteo.com/en/docs . Attribution appears beside the weather forecast.
 
 ## Phase 3 resumed lifecycle and pending-field metadata
+
+The connected Energy recommendation reads active `review_energy_spike` work orders from
+`GET /actions`, displays event savings in INR, and opens the Actions Queue. Legacy
+`energy.savingMwh=0` is a shaped pending value and is not displayed as measured monthly
+potential. Factor scores retain source precision and nullable values; source/source_column
+identify the dataset column. Sustainability's dotted persistence line is labelled baseline
+projection and uses a 0–100 axis; no calibrated score prediction is claimed.
+
+Stream ticks update the replay cursor and notifications immediately. Dashboard refreshes are
+coalesced while a request is pending, then load the latest cursor without discarding each
+in-flight response. Reconnection deduplicates by stable `alert_id` (falling back to a legacy
+notification ID), so prediction-to-real replacement retains one notification.
 
 `/dashboard` adds `pending_fields: Record<string,string>` with values `pending phase 4`; existing
 KPI shapes/empty values remain unchanged. History accepts optional `start/end` from the selected
