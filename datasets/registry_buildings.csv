@@ -1,0 +1,8 @@
+facility_id,zone_id,building_id,building_label,floor_count,total_area_m2,total_capacity_people,data_source
+F01,Academic,Academic,Academic Block,5,4000,1360,registry_assumed
+F01,Academic,Lecture,Lecture Block,3,2100,1401,registry_assumed
+F01,Academic,Library,Library,4,2950,716,registry_assumed
+F01,Residential,Boys,Boys Hostel,6,4150,330,registry_assumed
+F01,Residential,Girls,Girls Hostel,6,4150,330,registry_assumed
+F01,CentralServices,Mess,Mess,2,1250,617,registry_assumed
+F01,CentralServices,Facilities,Facilities Block,2,1100,80,registry_assumed

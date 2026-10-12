@@ -1,0 +1,5 @@
+factor_name,value,unit,factor_version,note
+grid,0.716,kgCO2e/kWh,v1,assumption
+diesel,2.68,kgCO2e/litre,v1,assumption
+vehicle,0.25,kgCO2e/movement,v1,assumption
+landfill,0.45,kgCO2e/kg,v1,assumption

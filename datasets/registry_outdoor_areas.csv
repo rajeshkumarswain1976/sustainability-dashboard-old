@@ -1,0 +1,4 @@
+facility_id,zone_id,area_id,location,area_weight,data_source
+F01,Residential,N2,North Walk,3.0,registry_assumed
+F01,Academic,S1,Science Annex,1.5,registry_assumed
+F01,CentralServices,E4,East Car Park,1.0,registry_assumed

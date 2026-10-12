@@ -1,0 +1,6 @@
+Jev vs rules decision evaluation
+
+Agreement and probability bins use rules as a comparison proxy, not ground-truth calibration.
+A labeled validation set is required to measure true calibration.
+
+No paired Jev/rules decisions found. Run replay with DECISION_PROVIDER=shadow, then rerun this script.

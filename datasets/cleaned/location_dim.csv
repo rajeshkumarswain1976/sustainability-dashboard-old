@@ -1,0 +1,43 @@
+node_id,level,parent_id,label,zone_id,building_id,floor_id,sort_order,data_source
+F01,facility,,Campus A,,,,0,registry_assumed
+Academic,zone,F01,Academic,Academic,,,1,registry_assumed
+Residential,zone,F01,Residential,Residential,,,2,registry_assumed
+CentralServices,zone,F01,Central services,CentralServices,,,3,registry_assumed
+Academic,building,Academic,Academic Block,Academic,Academic,,1,registry_assumed
+Academic_F0,floor,Academic,Ground floor,Academic,Academic,Academic_F0,0,registry_assumed
+Academic_F1,floor,Academic,Floor 1,Academic,Academic,Academic_F1,1,registry_assumed
+Academic_F2,floor,Academic,Floor 2,Academic,Academic,Academic_F2,2,registry_assumed
+Academic_F3,floor,Academic,Floor 3,Academic,Academic,Academic_F3,3,registry_assumed
+Academic_F4,floor,Academic,Floor 4,Academic,Academic,Academic_F4,4,registry_assumed
+Lecture,building,Academic,Lecture Block,Academic,Lecture,,2,registry_assumed
+Lecture_F0,floor,Lecture,Ground floor,Academic,Lecture,Lecture_F0,0,registry_assumed
+Lecture_F1,floor,Lecture,Floor 1,Academic,Lecture,Lecture_F1,1,registry_assumed
+Lecture_F2,floor,Lecture,Floor 2,Academic,Lecture,Lecture_F2,2,registry_assumed
+Library,building,Academic,Library,Academic,Library,,3,registry_assumed
+Library_F0,floor,Library,Ground floor,Academic,Library,Library_F0,0,registry_assumed
+Library_F1,floor,Library,Floor 1,Academic,Library,Library_F1,1,registry_assumed
+Library_F2,floor,Library,Floor 2,Academic,Library,Library_F2,2,registry_assumed
+Library_F3,floor,Library,Floor 3,Academic,Library,Library_F3,3,registry_assumed
+Boys,building,Residential,Boys Hostel,Residential,Boys,,4,registry_assumed
+Boys_F0,floor,Boys,Ground floor,Residential,Boys,Boys_F0,0,registry_assumed
+Boys_F1,floor,Boys,Floor 1,Residential,Boys,Boys_F1,1,registry_assumed
+Boys_F2,floor,Boys,Floor 2,Residential,Boys,Boys_F2,2,registry_assumed
+Boys_F3,floor,Boys,Floor 3,Residential,Boys,Boys_F3,3,registry_assumed
+Boys_F4,floor,Boys,Floor 4,Residential,Boys,Boys_F4,4,registry_assumed
+Boys_F5,floor,Boys,Floor 5,Residential,Boys,Boys_F5,5,registry_assumed
+Girls,building,Residential,Girls Hostel,Residential,Girls,,5,registry_assumed
+Girls_F0,floor,Girls,Ground floor,Residential,Girls,Girls_F0,0,registry_assumed
+Girls_F1,floor,Girls,Floor 1,Residential,Girls,Girls_F1,1,registry_assumed
+Girls_F2,floor,Girls,Floor 2,Residential,Girls,Girls_F2,2,registry_assumed
+Girls_F3,floor,Girls,Floor 3,Residential,Girls,Girls_F3,3,registry_assumed
+Girls_F4,floor,Girls,Floor 4,Residential,Girls,Girls_F4,4,registry_assumed
+Girls_F5,floor,Girls,Floor 5,Residential,Girls,Girls_F5,5,registry_assumed
+Mess,building,CentralServices,Mess,CentralServices,Mess,,6,registry_assumed
+Mess_F0,floor,Mess,Ground floor,CentralServices,Mess,Mess_F0,0,registry_assumed
+Mess_F1,floor,Mess,Floor 1,CentralServices,Mess,Mess_F1,1,registry_assumed
+Facilities,building,CentralServices,Facilities Block,CentralServices,Facilities,,7,registry_assumed
+Facilities_F0,floor,Facilities,Ground floor,CentralServices,Facilities,Facilities_F0,0,registry_assumed
+Facilities_F1,floor,Facilities,Floor 1,CentralServices,Facilities,Facilities_F1,1,registry_assumed
+N2,area,Residential,North Walk,Residential,,,1,registry_assumed
+S1,area,Academic,Science Annex,Academic,,,2,registry_assumed
+E4,area,CentralServices,East Car Park,CentralServices,,,3,registry_assumed

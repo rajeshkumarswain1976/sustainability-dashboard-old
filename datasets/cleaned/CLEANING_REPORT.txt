@@ -1,0 +1,35 @@
+Source CSVs are preserved in the parent datasets folder.
+Replay window: source observations dated Oct 1-9, 2026, shifted +3 days to Oct 4-12, 2026 (Asia/Kolkata, UTC+05:30).
+Non-October observation rows are excluded from these replay copies; originals retain all rows.
+All-blank and all-zero columns are removed. No all-zero columns existed in the full source; telemetry_gap and imputed_flag became all-zero after selecting October observations and were removed. Blank-only fields removed: safety_incidents.asset_id; sustainability.climate_score; sustainability.sustainability_score.
+Valid mixed zero readings are retained; ZERO_VALUE_REVIEW.csv lists their counts. No zero met a field-level rule proving it was a missing-value sentinel, so no valid zero was imputed. Planned/future dates remain future dates after the same +3 day shift. Non-finite numeric tokens were cleared in cleaned copies and retained in ANOMALIES.csv.
+
+air_environment.csv: 2592 source rows -> 432 replay rows; removed no columns
+assets_equipment.csv: 49248 source rows -> 8208 replay rows; removed telemetry_gap (all zero)
+campus_operations.csv: 1296 source rows -> 216 replay rows; removed no columns
+climate_resilience.csv: 7776 source rows -> 1296 replay rows; removed no columns
+emissions.csv: 36288 source rows -> 6048 replay rows; removed no columns
+energy_building_hourly.csv: 9072 source rows -> 1512 replay rows; removed imputed_flag (all zero)
+energy_floor_hourly.csv: 36288 source rows -> 6048 replay rows; removed no columns
+inspections.csv: 400 source rows -> 400 replay rows; removed no columns
+location_dim.csv: 42 source rows -> 42 replay rows; removed no columns
+occupancy_floor_hourly.csv: 36288 source rows -> 6048 replay rows; removed no columns
+occupancy_hourly.csv: 9072 source rows -> 1512 replay rows; removed no columns
+registry_assets.csv: 38 source rows -> 38 replay rows; removed no columns
+registry_bins.csv: 57 source rows -> 57 replay rows; removed no columns
+registry_buildings.csv: 7 source rows -> 7 replay rows; removed no columns
+registry_emission_factors.csv: 4 source rows -> 4 replay rows; removed no columns
+registry_floors.csv: 28 source rows -> 28 replay rows; removed no columns
+registry_meters.csv: 15 source rows -> 15 replay rows; removed no columns
+registry_outdoor_areas.csv: 3 source rows -> 3 replay rows; removed no columns
+registry_tanks.csv: 3 source rows -> 3 replay rows; removed no columns
+registry_zones_climate.csv: 6 source rows -> 6 replay rows; removed no columns
+safety_incidents.csv: 48 source rows -> 11 replay rows; removed asset_id (all blank)
+signals_energy.csv: 7 source rows -> 5 replay rows; removed no columns
+sustainability.csv: 54 source rows -> 9 replay rows; removed climate_score (all blank), sustainability_score (all blank)
+traffic_parking.csv: 3888 source rows -> 648 replay rows; removed no columns
+waste_hourly.csv: 73872 source rows -> 12312 replay rows; removed no columns
+water_hourly.csv: 19440 source rows -> 3240 replay rows; removed no columns
+water_resources.csv: 1296 source rows -> 216 replay rows; removed no columns
+water_tank_levels.csv: 3888 source rows -> 648 replay rows; removed no columns
+weather.csv: 1296 source rows -> 216 replay rows; removed no columns

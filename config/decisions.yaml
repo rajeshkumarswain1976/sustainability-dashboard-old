@@ -1,0 +1,77 @@
+thresholds: {act: 0.8, review: 0.6}
+decisions:
+  triage.anomaly:
+    id: triage.anomaly
+    kind: choice
+    question: Is this detector signal a real operational issue, a data gap, or an expected pattern at this time and location?
+    options:
+      real_issue: The measurements support a real issue that needs attention.
+      data_gap: The signal is caused by missing or unreliable data.
+      expected_pattern: The signal fits a holiday, occupancy, weather, or scheduled operation pattern.
+    state_fields: [candidate, context, weather, campus_operations]
+  alert.level:
+    id: alert.level
+    kind: choice
+    question: What alert level matches the operational impact and urgency of this real issue?
+    options: {Info: Low impact, Warning: Moderate impact or prompt attention, Critical: High impact or immediate response}
+    state_fields: [candidate, context, forecasts]
+  router.complexity:
+    id: router.complexity
+    kind: choice
+    question: Can one sector action rule handle this issue, or does it need reasoning across domains?
+    options: {routine: A single known sector action handles it, multi_domain: Several domains or competing impacts require review}
+    state_fields: [candidate, context, open_alerts]
+  owner.assign:
+    id: owner.assign
+    kind: choice
+    question: Which team should own this action?
+    options: {Facilities: Building or energy operations, Plumbing: Water systems, Housekeeping: Waste collection, Security: Safety and access, Admin: Policy and coordination, IT: Sensor or data systems}
+    state_fields: [candidate, action]
+  action.priority:
+    id: action.priority
+    kind: score
+    question: How urgent is this action, from zero routine to one hundred immediate?
+    options: [0 routine, 25 low, 50 moderate, 75 urgent, 100 immediate]
+    state_fields: [candidate, action, context]
+  incident.type:
+    id: incident.type
+    kind: choice
+    question: What kind of campus safety incident is described?
+    options: {injury: Injury or medical response, security: Security concern, fire: Fire or smoke, infrastructure: Unsafe infrastructure, other: Other incident}
+    state_fields: [incident]
+  incident.severity:
+    id: incident.severity
+    kind: choice
+    question: What is the incident severity?
+    options: {low: Minor, medium: Needs prompt response, high: Serious, critical: Immediate danger}
+    state_fields: [incident]
+  complaint.category:
+    id: complaint.category
+    kind: choice
+    question: Which operational category best describes this complaint?
+    options: {energy: Electricity or HVAC, water: Water, waste: Waste, air: Air quality, mobility: Traffic or parking, assets: Equipment, safety: Safety, other: Other}
+    state_fields: [complaint]
+  complaint.cluster:
+    id: complaint.cluster
+    kind: yesno
+    question: Does this complaint describe the same underlying issue as the existing cluster?
+    options: {true: Same issue, false: Different issue}
+    state_fields: [complaint, cluster]
+  policy.applicability:
+    id: policy.applicability
+    kind: yesno
+    question: Does the cited policy apply to this action and location?
+    options: {true: Applies, false: Does not apply}
+    state_fields: [action, policy]
+  copilot.scope:
+    id: copilot.scope
+    kind: choice
+    question: Is the request within the dashboard's sustainability operations scope?
+    options: {in_scope: Answerable from campus operations, out_of_scope: Outside campus operations, needs_review: Ambiguous request}
+    state_fields: [request, snapshot]
+  copilot.grounding:
+    id: copilot.grounding
+    kind: yesno
+    question: Is every factual claim in the proposed response supported by the snapshot?
+    options: {true: Fully supported, false: Unsupported claims present}
+    state_fields: [response, snapshot]

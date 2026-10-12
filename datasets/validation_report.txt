@@ -1,0 +1,60 @@
+PASS  occupancy_hourly.csv: rows = 7 units x 1296 hours  9072
+PASS  occupancy_hourly.csv: no duplicate keys  
+PASS  occupancy_floor_hourly.csv: rows = 28 units x 1296 hours  36288
+PASS  occupancy_floor_hourly.csv: no duplicate keys  
+PASS  weather.csv: rows = 1 units x 1296 hours  1296
+PASS  weather.csv: no duplicate keys  
+PASS  energy_building_hourly.csv: rows = 7 units x 1296 hours  9072
+PASS  energy_building_hourly.csv: no duplicate keys  
+PASS  energy_floor_hourly.csv: rows = 28 units x 1296 hours  36288
+PASS  energy_floor_hourly.csv: no duplicate keys  
+PASS  water_hourly.csv: rows = 15 units x 1296 hours  19440
+PASS  water_hourly.csv: no duplicate keys  
+PASS  water_tank_levels.csv: rows = 3 units x 1296 hours  3888
+PASS  water_tank_levels.csv: no duplicate keys  
+PASS  water_resources.csv: rows = 1 units x 1296 hours  1296
+PASS  water_resources.csv: no duplicate keys  
+PASS  waste_hourly.csv: rows = 57 units x 1296 hours  73872
+PASS  waste_hourly.csv: no duplicate keys  
+PASS  traffic_parking.csv: rows = 3 units x 1296 hours  3888
+PASS  traffic_parking.csv: no duplicate keys  
+PASS  assets_equipment.csv: rows = 38 units x 1296 hours  49248
+PASS  assets_equipment.csv: no duplicate keys  
+PASS  climate_resilience.csv: rows = 6 units x 1296 hours  7776
+PASS  climate_resilience.csv: no duplicate keys  
+PASS  air_environment.csv: rows = 2 units x 1296 hours  2592
+PASS  air_environment.csv: no duplicate keys  
+PASS  emissions.csv: rows = 28 units x 1296 hours  36288
+PASS  emissions.csv: no duplicate keys  
+PASS  campus_operations.csv: rows = 1 units x 1296 hours  1296
+PASS  campus_operations.csv: no duplicate keys  
+PASS  occupancy: floors sum to building every hour  
+PASS  occupancy: never above capacity  
+PASS  energy: floors sum to building  
+PASS  energy: grid import within 0..energy  
+PASS  water: tank levels within capacity  
+PASS  water: meters add to campus total  
+PASS  waste: fill 0..100  
+PASS  traffic: parking within capacity  
+PASS  traffic: classes sum to vehicle count  
+PASS  assets: utilisation 0..1  
+PASS  assets: load never above floor kWh  
+PASS  emissions: total = parts  
+PASS  location tree: parents exist  
+WARN  energy: scripted +18% event flagged  
+PASS  energy: flags outside event below 1%  0.39%
+PASS  waste: bins full (overflow state) 3-8% of bin-hours  5.80%
+PASS  water: litres per person per day 40-200  118
+PASS  water: leak flagged only for Hall C on 2026-10-09  {'M03': 3}
+PASS  assets: at least 3 failures  
+PASS  safety: N2 has the most incidents  
+PASS  weather, air and climate series populated  
+PASS  anonymisation scan  
+
+hours: 1296
+energy coverage window saved in private/source_map.json
+weather from API: False
+weather fully populated: True
+air from API: False
+air fully populated: True
+assets: 38  bins: 57  incidents: 48

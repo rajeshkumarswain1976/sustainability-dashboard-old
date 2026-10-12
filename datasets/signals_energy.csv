@@ -1,0 +1,8 @@
+signal_id,timestamp_start,timestamp_end,building_id,excess_pct,z_score,method,baseline_window,confidence,data_source
+SIG0001,2026-10-03 11:00:00+05:30,2026-10-03 13:00:00+05:30,Academic,53.7,3.45,hour_of_week_median_3sd_3h,prior_same_weekday_hour_min4,0.9,derived
+SIG0002,2026-10-03 06:00:00+05:30,2026-10-03 13:00:00+05:30,Lecture,inf,,hour_of_week_median_3sd_3h,prior_same_weekday_hour_min4,0.9,derived
+SIG0003,2026-09-20 16:00:00+05:30,2026-09-20 18:00:00+05:30,Boys,47.7,5.94,hour_of_week_median_3sd_3h,prior_same_weekday_hour_min4,0.9,derived
+SIG0004,2026-10-03 19:00:00+05:30,2026-10-04 03:00:00+05:30,Boys,110.1,5.29,hour_of_week_median_3sd_3h,prior_same_weekday_hour_min4,0.9,derived
+SIG0005,2026-10-04 20:00:00+05:30,2026-10-05 00:00:00+05:30,Boys,73.7,6.02,hour_of_week_median_3sd_3h,prior_same_weekday_hour_min4,0.9,derived
+SIG0006,2026-10-03 22:00:00+05:30,2026-10-04 01:00:00+05:30,Girls,59.0,5.27,hour_of_week_median_3sd_3h,prior_same_weekday_hour_min4,0.9,derived
+SIG0007,2026-09-27 14:00:00+05:30,2026-09-27 16:00:00+05:30,Facilities,20.2,3.34,hour_of_week_median_3sd_3h,prior_same_weekday_hour_min4,0.9,derived

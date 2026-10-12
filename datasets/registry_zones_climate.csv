@@ -1,0 +1,7 @@
+facility_id,zone_id,elevation_m,drainage_capacity,low_lying_flag,building_exposure,asset_criticality,backup_power_hours,data_source
+F01,Academic,217,30,0,0.8,0.9,6,registry_assumed
+F01,Residential,216,22,1,0.9,0.8,8,registry_assumed
+F01,CentralServices,217,28,0,0.6,0.7,4,registry_assumed
+F01,N2,218,35,0,0.5,0.4,4,registry_assumed
+F01,S1,216,25,1,0.8,0.9,6,registry_assumed
+F01,E4,214,18,1,0.3,0.2,1,registry_assumed

@@ -1,0 +1,9 @@
+sector: hospital
+active: false
+version: 1
+domains: []
+kpis: {}
+thresholds: {}
+actions: []
+docs_folder: knowledge/hospital
+tools: []

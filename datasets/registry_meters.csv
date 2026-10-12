@@ -1,0 +1,16 @@
+facility_id,zone_id,building_id,meter_id,meter_label,water_source,data_source
+F01,Academic,Academic,M01,Academic meter,municipal,registry_assumed
+F01,Academic,Academic,M02,Academic meter,borewell,registry_assumed
+F01,Residential,Boys,M03,Hall C,municipal,registry_assumed
+F01,Residential,Boys,M04,Boys meter,borewell,registry_assumed
+F01,Residential,Boys,M05,Boys meter,municipal,registry_assumed
+F01,Residential,Boys,M06,Boys meter,borewell,registry_assumed
+F01,Residential,Girls,M07,Girls meter,municipal,registry_assumed
+F01,Residential,Girls,M08,Girls meter,borewell,registry_assumed
+F01,Residential,Girls,M09,Girls meter,municipal,registry_assumed
+F01,Academic,Lecture,M10,Lecture meter,borewell,registry_assumed
+F01,Academic,Library,M11,Library meter,municipal,registry_assumed
+F01,CentralServices,Mess,M12,Mess meter,borewell,registry_assumed
+F01,CentralServices,Mess,M13,Mess meter,municipal,registry_assumed
+F01,CentralServices,Facilities,M14,Facilities meter,borewell,registry_assumed
+F01,CentralServices,,M15,Landscape,municipal,registry_assumed
