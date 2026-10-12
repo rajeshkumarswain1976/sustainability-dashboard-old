@@ -39,3 +39,37 @@ The current UI contains additional hard-coded narrative charts, examples, and sa
 ## Domain and forecast endpoints available for later widgets
 
 `GET /energy|water|waste|air|assets|mobility|safety|climate|sustainability|emissions` each takes `node,start,end,as_of` and returns `{window,data_source,kpis,series}` (safety uses `incidents` instead of `series`). `GET /forecast/{energy|water|parking}?node=&as_of=` returns `{domain,node,as_of,forecasts:[{entity_id,model,mae,baseline_mae,series}]}` and top-level metrics for a single entity. Units follow the source columns (`energy_kwh`, `water_consumption_litres`, `parking_occupancy`).
+
+
+## Forecast contract after repair (2026-10-12)
+
+All forecast requests accept `node` and `as_of` (ISO time; normalized to IST). Omitting `as_of` uses the replay cursor. `/forecast/{domain}` additionally accepts `metric` and `horizon=24h|7d`; invalid metrics/horizons return 422, unknown domains/locations return 404. Source-compatible names `timestamp,value,lower,upper` are retained.
+
+| Endpoint | Response |
+| --- | --- |
+| `GET /forecast` | `{as_of,targets:[{id,domain,table,entity_key,metric,horizons,method,baseline,drivers}],data_source}`; complaints is pending. |
+| `GET /forecast/{domain}` | `{domain,node,as_of,horizon,data_source,forecasts:[{entity_id,model,mae:number|null,baseline_mae:number|null,series:[{timestamp,value,lower,upper}]}]}` plus domain fields below. Every point is finite and satisfies `lower <= value <= upper`, enforced by `ForecastResponse` in `app/api/schemas.py`. |
+| `GET /forecast/accuracy` | `{as_of,node,targets:[{target,domain,method,served_model,mae,baseline_mae,smape,folds,status}],data_source}`. `mae` is ML error; `baseline_mae` is the selected baseline's error. Folds also include measured `band_coverage`, `served_mae` and `served_smape`. `status` is `evaluated`, `not_evaluated` or `pending`; unmeasured errors are null. Reads persisted evaluations when no matching process cache remains. |
+| `GET /forecast/risks` | `{as_of,node,risks:[{type,node,domain,predicted_time,lead_time_hours,facts}],count,data_source}`. Persists predictive candidates in alerts, deduplicated by `type|node|predicted_day`, with null level/confidence and predictive facts in `facts.observations`. |
+
+| Domain | Metrics and units | Horizons / notes |
+| --- | --- | --- |
+| energy | `energy_kwh` (kWh), `peak_demand_kw` (kW) | 24h hourly or 7d daily; `floor_forecasts` use normalized current shares. Daily kWh sums activity and daily kW takes the maximum. |
+| occupancy | `occupancy_count` (people) | 24h hourly or 7d daily mean; daily results are labelled seasonal. |
+| water | `water_consumption_litres` (L), `tank_level_pct` (%), `days_of_water_available` (days) | 24h; water responses include campus total and individual meters. Tank points include pump state/inflow; runway uses actual stored water / forecast daily use. |
+| waste | `waste_weight` (kg), `fill_percentage` (%), `diversion_rate` (0?1) | 24h; `bin_fill_pct` is a supported fill alias. Per-bin simulations include `predicted_overflow_time`. |
+| mobility / parking | `vehicle_count` (movements), `parking_occupancy` (spaces), `delay_min` (minutes) | 24h; parking points alone add `parking_percent`, derived from observed capacity. |
+| air | `aqi_cpcb`, `pm25`, `pm10`, `no2` | Campus zone, 24h; only AQI points have CPCB categories. |
+| weather | `temperature`, `humidity`, `rainfall`, `wind_speed` | 24h hourly or 7 full future calendar days; rainfall daily sum, other daily means; synthetic climatology/persistence fallback. |
+| climate | `heat_risk`, `flood_risk` (0?100) | 24h per registry zone; omitted metric returns both metrics. |
+| emissions | `energy_co2e`, `mobility_co2e`, `waste_co2e`, `total_co2e` | 24h or 7d, per building, **kgCO2e**. Each point also has the four component/total fields. Missing factors give empty series with `status=missing_emission_factors`. |
+| assets | `failure_risk` (0?100), `vibration` | 24h; rule scores and linear trends respectively, based on observed assets only. |
+| safety | `incident_count`, `risk_index` (0?100) | Incident counts: 7 daily points, Poisson observed rates; risk index: 24 hourly darkness/rain points labelled rule. |
+| sustainability | `sustainability_score` (0?100) | 7 daily points; `projection=true`, `projection_basis` explains the current persistence fallback. |
+| complaints | `complaints_count` | Returns `status=pending`, `forecasts=[]`; no complaint table is accessed or changed. |
+
+Pydantic and client types permit extra domain fields, while validating the shared series. An empty/no-history response is rendered as empty, never as successful dummy data. Method badges map `hist_gradient_boosting` to `ML`; other methods retain their actual labels. The synthetic badge follows `data_source.classification`. ML/seasonal hourly bands use measured residual buckets; daily and derived bands remain heuristic and should not be presented as a calibrated confidence percentage. The frontend includes loading, empty, error and retry states.
+
+The earlier Phase 3 mapping remains valid for current KPIs. Its older three-domain forecast description is superseded by this section. Full forecasting acceptance gaps and measured results are recorded in STATE.md.
+
+Saved forecast/model IDs include the horizon to keep an hourly midnight value separate from a daily total. Accuracy reports measured hourly ML target evaluations; unevaluated daily baselines do not overwrite them. Refreshes replace only matching forecast IDs and preserve points for other scopes.

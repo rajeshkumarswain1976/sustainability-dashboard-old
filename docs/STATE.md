@@ -1,3 +1,34 @@
+# Forecasting repair audit (2026-10-12)
+
+The interrupted work was preserved in commit `c65caa3` (`wip: interrupted phase 3`). The repair does not change decision, engine, agent, action, decision-log, or complaint implementations. The existing snapshot change was preserved in that safety commit.
+
+## Verified corrections
+
+- Reinstalled the locked frontend dependencies. The initial build failure was a missing `braces/lib/compile` module; the production build now passes without changing the dependency versions.
+- Separated exact issue-time/location/metric response caching from campus-wide daily model caching. Cache keys include the database bind and model class; cached responses are copied before domain-specific decoration. Daily training ends at midnight, so an earlier replay request cannot reuse a model trained on later hours. Persisted records distinguish 24h/7d horizons, and a scoped refresh cannot delete another location's forecast points. Bounded caches limit retained models and responses.
+- Train/evaluate every entity rather than only the first ten. The catalogue now registers 31 active targets and one pending complaints target, including individual air pollutants, weather metrics, emission components, water runway, and the hourly safety index.
+- Removed the production branch that fabricated forecast values when tests monkeypatched training. The retraining test now observes the real backtest call.
+- Removed invented accuracy numbers and fixed band coverage. Baseline ties do not qualify as a 3% ML improvement. Bands use residuals from the served model; coverage is calculated from held-out predictions. Measured evaluations are persisted and can be read after clearing the process cache. Missing evaluations are explicitly `not_evaluated` with null errors.
+- Daily energy/occupancy use a labelled seasonal baseline over completed historical calendar days. Peak demand is a maximum, rather than a sum of hourly kW. Floor shares are normalized and the hourly/daily floor forecasts sum to the building series.
+- Tank capacities, current volumes, and pump states come from source records; no synthetic starting state is invented. The pump consumes water, starts below 40%, refills at capacity/6 per hour, and stops at 85%. Runway uses current stored volume, rather than total tank capacity.
+- Bin simulation follows 06:00, 12:00, and 18:00 pickups and clips observed fill at 100%; historical checks include observed delayed collections. Future simulations assume scheduled pickups, without reading future collection rows. Diversion uses registry bin types, not bin-name guesses. Parking capacities come from observed gate rows.
+- Heat-index threshold and heat/flood formulas were recovered from the source columns and verified against every historical weather/climate row. Climate forecasts are per registry zone and carry the five observed rain hours into each future six-hour window.
+- Emissions use registry factors and forecast energy, vehicles, and waste, in source units of kgCO2e. Mobility is allocated using historical building shares; each total equals its component sum. Missing factors return an empty result instead of invented factors.
+- Asset rules use observed load divided by rated capacity, past downtime, the registry's actual last service date and maintenance interval, and a time-based vibration trend. Lowercase pump/chiller types are included. Safety uses registered area IDs and observed daily Poisson rates.
+- Sustainability no longer starts at a fixed 78.4 or invents a 0.3-point daily improvement. It returns a labelled persistence projection of the latest observed score using the existing score calculation.
+- Real-mode forecast charts use the shared API widget, with method/source badges, bands, entity/metric selection, and loading/empty/error/retry states. Mock curves remain behind `VITE_USE_MOCK=true`. Overview and Energy use predictive risk results; Insights has a refreshable accuracy table. Emissions are presented on Energy because this checkout has no separate Emissions page.
+
+## Remaining acceptance gaps (full forecasting is not marked complete)
+
+- Sustainability still holds the latest observed score; applying the generator's KPI-to-score component formulas to predicted daily KPIs remains unimplemented. Those component formulas are not present in this checkout.
+- The seven-day energy/occupancy forecasts are seasonal baselines, not seven-day direct ML models. Daily baseline and formula/rule/simulation uncertainty bands have not been independently calibrated/backtested.
+- A replay from 2026-10-08 12:00 IST did not predict the specified 9 October heavy-rain readiness event or the North Dining `Mess_F1_B4` overflow. Climatology/persistence cannot know an unprecedented future storm or an unannounced missed pickup; future source rows must remain excluded. These story acceptance checks remain open.
+- Full browser rendering, interaction and console smoke checks remain unverified because no browser automation tool is available in this session. Production compilation and real endpoint contract checks pass.
+- Measured local full refresh: 29.82 seconds; cached risk calculation: 0.21 seconds. This is not a benchmark of the protected Phase 3 replay/decision/action pipeline.
+- Existing lint warnings and the large JavaScript bundle warning remain. An npm audit found seven transitive development dependency advisories (five high, two moderate); fixing all requires a major Tailwind migration according to npm. This repair retains the existing design/dependency versions.
+
+The historical Phase 3 audit below is retained as the pre-change record.
+
 # Phase 3 audit: code and storage as found
 
 Audited 2026-10-12 from `app/api/routes.py`, `app/db.py`, `app/engine/{pipeline,replay}.py`, the CSV-derived SQLAlchemy metadata, and a read-only inspection of the live Neon catalog. The React frontend is at the repository root (`src/`), not a separate `<path>`.

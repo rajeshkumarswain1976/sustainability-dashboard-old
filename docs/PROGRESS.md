@@ -29,3 +29,16 @@ The Jev client follows the official TypeSafe API (`POST /v1/systemone`, bearer k
 Phase 3 remains unchecked until the real Jev request is authorized and the browser page check is completed. `.env.example` previously contained a real database URL; it now contains placeholders. The exposed database credential should be rotated before sharing the repository.
 
 For local Windows development when Neon connectivity is unavailable, run `.venv\Scripts\python.exe -m scripts.build_local_db` once, then launch the API with `DATABASE_URL=sqlite+pysqlite:///C:/Users/HP/Desktop/sustainability-dashboard/sustainability.db`. This ignored local copy was used for the HTTP smoke check; the configured Neon database was not replaced.
+
+
+## Forecasting repairs (2026-10-12)
+
+- [x] Preserve interrupted work in the requested safety commit.
+- [x] Repair missing frontend dependencies and production compilation.
+- [x] Correct issue-time/metric/location caches, entity sampling, baseline gating, bands and real accuracy reporting.
+- [x] Correct tank/bin simulations, floor reconciliation, source-based safety rates, climate formulas, emissions and asset inputs.
+- [x] Register missing metrics and connect forecast charts, risk signals and Insights accuracy.
+- [x] Add isolated leakage, finite-band, cache isolation, historical simulation, formula, factor, persistence and HTTP contract regression checks.
+- [ ] Full forecasting acceptance: daily KPI-based sustainability projections, independently evaluated daily/derived bands, both story-event predictions and browser verification remain open; see STATE.md.
+
+Validation: 63 backend tests passed; the new all-target HTTP/persistence contract test also passed separately after replacing the earlier source-wiring check. Production build passes. Lint exits successfully with existing warnings. Local measurements: full forecast refresh 29.82s; cached risk calculation 0.21s. No external Jev/Groq requests or production database migrations were made by this repair.
