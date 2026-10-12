@@ -14,6 +14,7 @@ dist-ssr
 .venv/
 __pycache__/
 .pytest_cache/
+.npm-cache/
 .env
 private/
 sustainability.db

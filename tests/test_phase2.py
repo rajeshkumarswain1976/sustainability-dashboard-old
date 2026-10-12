@@ -234,16 +234,16 @@ def test_ml_is_not_served_when_it_loses(database, monkeypatch):
     assert selected["model"] == "seasonal"
 
 
-def test_forecast_retrains_after_24_replay_hours(database, monkeypatch):
+def test_forecast_retrains_on_next_replay_day(database, monkeypatch):
     trained = []
+    original = forecast_module.forecast_engine.run_rolling_origin_backtest
 
-    def fake_train(work, cutoff):
-        trained.append(cutoff)
-        return {"model_object": None, "model": "seasonal", "mae": 5.0,
-                "baseline_mae": 4.0, "band": 4.0}
+    def record_training(*args, **kwargs):
+        trained.append(args[-1])
+        return original(*args, **kwargs)
 
     forecast_module._MODEL_CACHE.clear()
-    monkeypatch.setattr(forecast_module, "_train", fake_train)
+    monkeypatch.setattr(forecast_module.forecast_engine, "run_rolling_origin_backtest", record_training)
     with Session(database) as session:
         for replay_time in (at("2026-10-08", 0), at("2026-10-08", 1),
                             at("2026-10-08", 23), at("2026-10-09", 0)):

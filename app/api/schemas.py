@@ -5,9 +5,42 @@ from datetime import datetime
 from typing import Any
 
 import pandas as pd
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.analytics.metrics import count_true, maximum, mean, sustainability_score, total
 from app.config import settings
+
+
+class ForecastPoint(BaseModel):
+    model_config = ConfigDict(extra="allow", allow_inf_nan=False)
+    timestamp: str
+    value: float
+    lower: float
+    upper: float
+
+    @model_validator(mode="after")
+    def ordered_band(self):
+        if not self.lower <= self.value <= self.upper:
+            raise ValueError("Forecast bands must contain the predicted value")
+        return self
+
+
+class EntityForecast(BaseModel):
+    model_config = ConfigDict(extra="allow", allow_inf_nan=False)
+    entity_id: str
+    model: str
+    mae: float | None = None
+    baseline_mae: float | None = None
+    series: list[ForecastPoint]
+
+
+class ForecastResponse(BaseModel):
+    model_config = ConfigDict(extra="allow", allow_inf_nan=False)
+    domain: str
+    node: str
+    as_of: str
+    data_source: dict[str, str]
+    forecasts: list[EntityForecast] = Field(default_factory=list)
 
 
 def _latest(frame: pd.DataFrame) -> pd.DataFrame:

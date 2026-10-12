@@ -210,3 +210,123 @@ targets:
     method: pending
     baseline: naive_last
     drivers: [pending]
+
+  - id: days_of_water_available
+    domain: water
+    table: water_tank_levels
+    entity_key: facility_id
+    metric: days_of_water_available
+    horizons: [24h]
+    method: formula
+    baseline: lag_24
+    drivers: [forecast_water_use, tank_volume]
+
+  - id: pm25
+    domain: air
+    table: air_environment
+    entity_key: zone_id
+    metric: pm25
+    horizons: [24h]
+    method: ml
+    baseline: lag_24
+    drivers: [wind_speed, rainfall]
+
+  - id: pm10
+    domain: air
+    table: air_environment
+    entity_key: zone_id
+    metric: pm10
+    horizons: [24h]
+    method: ml
+    baseline: lag_24
+    drivers: [wind_speed, rainfall]
+
+  - id: no2
+    domain: air
+    table: air_environment
+    entity_key: zone_id
+    metric: no2
+    horizons: [24h]
+    method: ml
+    baseline: lag_24
+    drivers: [wind_speed, rainfall]
+
+  - id: humidity
+    domain: weather
+    table: weather
+    entity_key: facility_id
+    metric: humidity
+    horizons: [24h, 7d]
+    method: formula
+    baseline: lag_24
+    drivers: [climatology_14d, persistence]
+
+  - id: rainfall
+    domain: weather
+    table: weather
+    entity_key: facility_id
+    metric: rainfall
+    horizons: [24h, 7d]
+    method: formula
+    baseline: lag_24
+    drivers: [climatology_14d, persistence]
+
+  - id: wind_speed
+    domain: weather
+    table: weather
+    entity_key: facility_id
+    metric: wind_speed
+    horizons: [24h, 7d]
+    method: formula
+    baseline: lag_24
+    drivers: [climatology_14d, persistence]
+
+  - id: flood_risk
+    domain: climate
+    table: climate_resilience
+    entity_key: zone_id
+    metric: flood_risk
+    horizons: [24h]
+    method: formula
+    baseline: lag_24
+    drivers: [forecast_rainfall]
+
+  - id: energy_co2e
+    domain: emissions
+    table: emissions
+    entity_key: building_id
+    metric: energy_co2e
+    horizons: [24h, 7d]
+    method: formula
+    baseline: lag_24
+    drivers: [forecast_energy_kwh, emission_factors]
+
+  - id: mobility_co2e
+    domain: emissions
+    table: emissions
+    entity_key: building_id
+    metric: mobility_co2e
+    horizons: [24h, 7d]
+    method: formula
+    baseline: lag_24
+    drivers: [forecast_vehicle_count, emission_factors]
+
+  - id: waste_co2e
+    domain: emissions
+    table: emissions
+    entity_key: building_id
+    metric: waste_co2e
+    horizons: [24h, 7d]
+    method: formula
+    baseline: lag_24
+    drivers: [forecast_waste_weight, emission_factors]
+
+  - id: safety_risk_index
+    domain: safety
+    table: safety_incidents
+    entity_key: area_id
+    metric: risk_index
+    horizons: [24h]
+    method: rule
+    baseline: lag_24
+    drivers: [darkness, rainfall]

@@ -4,6 +4,8 @@ Engine B: Gradient boosting, simulation, formulas, rules, and evaluation.
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+from copy import deepcopy
+from pathlib import Path
 import math
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -13,6 +15,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.metrics import mean_absolute_error
+from threadpoolctl import threadpool_limits
 from sqlalchemy import delete, insert, select
 from sqlalchemy.orm import Session
 
@@ -26,20 +29,29 @@ TZ = ZoneInfo("Asia/Kolkata")
 
 _REGISTRY_CACHE: list[dict[str, Any]] | None = None
 _GLOBAL_MODEL_CACHE: dict[tuple[Any, str, str], dict[str, Any]] = {}
+_TRAINED_MODEL_CACHE: dict[tuple[Any, ...], dict[str, Any]] = {}
 
 
 def load_forecast_targets() -> list[dict[str, Any]]:
     global _REGISTRY_CACHE
     if _REGISTRY_CACHE is not None:
         return _REGISTRY_CACHE
-    path = "config/forecasts.yaml"
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-            _REGISTRY_CACHE = data.get("targets", [])
-            return _REGISTRY_CACHE
-    except Exception:
-        return []
+    path = Path(__file__).resolve().parents[2] / "config" / "forecasts.yaml"
+    with open(path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    targets = data.get("targets") if isinstance(data, dict) else None
+    required = {"id", "domain", "table", "entity_key", "metric", "horizons", "method", "baseline", "drivers"}
+    if not isinstance(targets, list) or not targets:
+        raise ValueError("Forecast registry must contain a non-empty targets list")
+    seen = set()
+    for target in targets:
+        if not isinstance(target, dict) or not required.issubset(target):
+            raise ValueError("Forecast target is missing required fields")
+        if target["id"] in seen:
+            raise ValueError(f"Duplicate forecast target: {target['id']}")
+        seen.add(target["id"])
+    _REGISTRY_CACHE = targets
+    return _REGISTRY_CACHE
 
 
 def get_target_meta(target_id: str) -> dict[str, Any] | None:
@@ -70,7 +82,7 @@ def band_coverage(y_true: np.ndarray, lo: np.ndarray, hi: np.ndarray) -> float:
 
 def heat_index(temp_c: float, rh_pct: float) -> float:
     """Steadman / Rothfusz heat index calculation."""
-    if temp_c < 20.0:
+    if temp_c < 27.0:
         return temp_c
     T = temp_c * 9.0 / 5.0 + 32.0
     R = rh_pct
@@ -116,14 +128,7 @@ def forecast_weather(db: Session, as_of: datetime, horizon_hours: int = 24) -> p
     raw = fetch_frame(db, "weather", "F01", start_14d, cutoff, cutoff)
     metrics = ["temperature", "humidity", "rainfall", "wind_speed"]
     if raw.empty:
-        # Fallback defaults if no weather recorded
-        dates = [cutoff + timedelta(hours=h) for h in range(1, horizon_hours + 1)]
-        return pd.DataFrame({
-            "temperature": [28.0] * horizon_hours,
-            "humidity": [65.0] * horizon_hours,
-            "rainfall": [0.0] * horizon_hours,
-            "wind_speed": [2.0] * horizon_hours,
-        }, index=pd.DatetimeIndex(dates))
+        return pd.DataFrame(columns=metrics, index=pd.DatetimeIndex([], tz=TZ))
 
     raw["timestamp"] = pd.to_datetime(raw["timestamp"])
     raw = raw.sort_values("timestamp")
@@ -175,6 +180,8 @@ def extract_entity_series(frame: pd.DataFrame, entity_key: str | None, metric: s
     if frame.empty or metric not in frame.columns:
         return {}
     work = frame.copy()
+    work[metric] = pd.to_numeric(work[metric], errors="coerce").replace([np.inf, -np.inf], np.nan)
+    work = work.dropna(subset=[metric])
     work["timestamp"] = pd.to_datetime(work["timestamp"])
     series_map = {}
     if entity_key is None:
@@ -204,10 +211,9 @@ def build_training_matrix(
     y_rows = []
     entity_code_map = {ent: i for i, ent in enumerate(entities)}
     min_time = cutoff - timedelta(days=max_days)
-    max_samples = 4000
+    max_samples = 3000
 
-    # For large entity sets (e.g. 57 bins), train global model on representative entities
-    train_entities = entities[:10] if len(entities) > 10 else entities
+    train_entities = entities
     eff_step = max(step_sample, 8 if len(entities) > 10 else 4)
 
     # Fast weather lookup dict: timestamp -> (temp, hum, rain, wind)
@@ -245,7 +251,11 @@ def build_training_matrix(
             ts for ts in s_times
             if min_time <= ts <= (cutoff - timedelta(hours=24))
         ]
+        # Allocate the sample budget across every entity, including the last bins/meters.
+        entity_budget = max(1, max_samples // max(len(entities), 1) // 24)
         sampled_issues = valid_issue_times[::eff_step]
+        if len(sampled_issues) > entity_budget:
+            sampled_issues = [sampled_issues[i] for i in np.linspace(0, len(sampled_issues) - 1, entity_budget, dtype=int)]
 
         for t in sampled_issues:
             if len(X_rows) >= max_samples:
@@ -323,7 +333,7 @@ def run_rolling_origin_backtest(
     base_1_maes = []
 
     entity_code_map = {ent: i for i, ent in enumerate(entities)}
-    eval_entities = entities[:10] if len(entities) > 10 else entities
+    eval_entities = entities
 
     # Fast weather lookup
     w_lookup: dict[datetime, tuple[float, float, float, float]] = {}
@@ -361,10 +371,11 @@ def run_rolling_origin_backtest(
         model = None
         if len(y_tr) >= 100:
             model = model_cls(
-                max_iter=60, max_leaf_nodes=15, l2_regularization=1.0,
+                max_iter=45, max_leaf_nodes=15, l2_regularization=1.0,
                 categorical_features=[0], random_state=42
             )
-            model.fit(X_tr, y_tr)
+            with threadpool_limits(limits=1):
+                model.fit(X_tr, y_tr)
 
         # 2. Evaluate on 24h horizon after issue_time
         y_trues = []
@@ -425,7 +436,8 @@ def run_rolling_origin_backtest(
 
         if eval_meta:
             if model is not None and fold_feat_rows:
-                preds = model.predict(np.array(fold_feat_rows, dtype=float))
+                with threadpool_limits(limits=1):
+                    preds = model.predict(np.array(fold_feat_rows, dtype=float))
                 preds = np.maximum(0.0, preds)
             else:
                 preds = np.array([m[1] for m in eval_meta], dtype=float)
@@ -461,6 +473,10 @@ def run_rolling_origin_backtest(
                 "b168_mae": b168_mae,
                 "b24_mae": b24_mae,
                 "b1_mae": b1_mae,
+                "_actual": yt_arr,
+                "_ml": yp_arr,
+                "_baselines": {"lag_168": np.asarray(b168s), "lag_24": np.asarray(b24s), "naive_last": np.asarray(b1s)},
+                "_buckets": [item[4] for item in eval_meta],
             })
 
     # Overall baseline performance
@@ -480,8 +496,15 @@ def run_rolling_origin_backtest(
         fold_baseline_maes.append(f_bmae)
 
     # 3% rule: Beats best baseline MAE by at least 3% in most folds (>= 2 out of 3)
-    beats_count = sum(1 for m_mae, b_mae in zip(ml_maes, fold_baseline_maes) if m_mae <= 0.97 * b_mae)
+    beats_count = sum(1 for m_mae, b_mae in zip(ml_maes, fold_baseline_maes) if m_mae < b_mae and m_mae <= 0.97 * b_mae)
     is_ml_served = (beats_count >= 2) and (len(ml_maes) >= 2)
+
+    # Calibrate the bands to the model actually served, including seasonal fallback.
+    bucket_residuals = {1: [], 2: [], 3: []}
+    for fold in fold_results:
+        predictions = fold["_ml"] if is_ml_served else fold["_baselines"][best_baseline_name]
+        for residual, bucket in zip(fold["_actual"] - predictions, fold["_buckets"]):
+            bucket_residuals[bucket].append(float(residual))
 
     # Residual quantiles per bucket
     bands_by_bucket = {}
@@ -497,15 +520,26 @@ def run_rolling_origin_backtest(
             bands_by_bucket[b] = (-1.0, 1.0)
 
     # Band coverage
-    overall_mae = float(np.mean(ml_maes)) if ml_maes else best_baseline_mae
-    overall_smape = float(np.mean([f["smape"] for f in fold_results])) if fold_results else 0.0
+    for fold in fold_results:
+        actual = fold.pop("_actual")
+        predictions = fold.pop("_ml")
+        baselines = fold.pop("_baselines")
+        buckets = fold.pop("_buckets")
+        served = predictions if is_ml_served else baselines[best_baseline_name]
+        lower = np.maximum(0, served + np.array([bands_by_bucket[b][0] for b in buckets]))
+        upper = np.maximum(served, served + np.array([bands_by_bucket[b][1] for b in buckets]))
+        fold["band_coverage"] = band_coverage(actual, lower, upper)
+        fold["served_mae"] = float(mean_absolute_error(actual, served))
+        fold["served_smape"] = smape(actual, served)
+    overall_mae = float(np.mean(ml_maes)) if ml_maes else None
+    overall_smape = float(np.mean([f["smape"] for f in fold_results])) if fold_results else None
 
     return {
         "is_ml_served": is_ml_served,
         "served_model": "hist_gradient_boosting" if is_ml_served else "seasonal",
         "best_baseline": best_baseline_name,
         "overall_mae": overall_mae,
-        "best_baseline_mae": best_baseline_mae,
+        "best_baseline_mae": best_baseline_mae if fold_results else None,
         "overall_smape": overall_smape,
         "fold_results": fold_results,
         "bands_by_bucket": bands_by_bucket,
@@ -524,15 +558,17 @@ def fit_and_serve_global_model(
     model_cls: type = HistGradientBoostingRegressor,
 ) -> dict[str, Any]:
     cutoff = hour(as_of)
-    bind_key = str(getattr(db.get_bind(), "url", "db"))
-    cache_key = (bind_key, target_id, cutoff.date().isoformat())
+    bind_key = db.get_bind()
+    cache_key = (bind_key, target_id, metric, node, cutoff.isoformat(), model_cls)
     cached = _GLOBAL_MODEL_CACHE.get(cache_key)
     if cached is not None:
-        return cached
+        return deepcopy(cached)
 
-    # Fetch history up to cutoff (28 days = 4 weeks is optimal for 3 backtest folds + lag_168)
-    start = cutoff - timedelta(days=28)
-    raw = fetch_frame(db, table_name, node, start, cutoff, cutoff)
+    # Train campus-wide; serving scope must never change the model's entity coding.
+    start = cutoff - timedelta(days=56)
+    raw = fetch_frame(db, table_name, "F01", start, cutoff, cutoff)
+    if domain == "air" and not raw.empty:
+        raw = raw[raw["zone_id"] == "Campus"]
     series_map = extract_entity_series(raw, entity_key, metric)
     entities = sorted(series_map.keys()) if series_map else (["F01"] if entity_key is None else [])
 
@@ -545,27 +581,44 @@ def fit_and_serve_global_model(
 
     occ_raw = fetch_frame(db, "occupancy_hourly", "F01", start, cutoff, cutoff)
     occupancy_map = extract_entity_series(occ_raw, "building_id", "occupancy_count")
+    campus_occupancy = extract_entity_series(occ_raw, None, "occupancy_count").get("F01")
+    for entity in entities:
+        if entity in occupancy_map:
+            continue
+        rows = raw[raw[entity_key].astype(str) == entity] if entity_key and not raw.empty else raw
+        building = str(rows["building_id"].dropna().iloc[-1]) if "building_id" in rows and not rows["building_id"].dropna().empty else None
+        driver = occupancy_map.get(building, campus_occupancy)
+        if driver is not None:
+            occupancy_map[entity] = driver
 
     holidays = {str(day) for day in load_sector_config().get("holidays", [])}
 
-    # 1. Backtest
-    eval_res = run_rolling_origin_backtest(
-        model_cls, series_map, entities, holidays, weather_history, occupancy_map, cutoff
-    )
-
-    # 2. Train final model on all data up to cutoff
-    X_all, y_all = build_training_matrix(
-        series_map, entities, holidays, weather_history, occupancy_map,
-        cutoff=cutoff, max_days=28, step_sample=4
-    )
-
-    final_model = None
-    if eval_res["is_ml_served"] and len(y_all) >= 100:
-        final_model = model_cls(
-            max_iter=90, max_leaf_nodes=15, l2_regularization=1.0,
-            categorical_features=[0], random_state=42
+    train_end = cutoff.replace(hour=0)
+    train_key = (bind_key, target_id, metric, train_end.date(), model_cls)
+    trained = _TRAINED_MODEL_CACHE.get(train_key)
+    if trained is None:
+        train_series = {ent: s[s.index <= train_end] for ent, s in series_map.items()}
+        eval_res = run_rolling_origin_backtest(
+            model_cls, train_series, entities, holidays, weather_history, occupancy_map, train_end
         )
-        final_model.fit(X_all, y_all)
+        X_all, y_all = build_training_matrix(
+            train_series, entities, holidays, weather_history, occupancy_map,
+            cutoff=train_end, max_days=45, step_sample=4
+        )
+        final_model = None
+        if eval_res["is_ml_served"] and len(y_all) >= 100:
+            final_model = model_cls(max_iter=60, max_leaf_nodes=15, l2_regularization=1.0,
+                                    categorical_features=[0], random_state=42)
+            with threadpool_limits(limits=1):
+                final_model.fit(X_all, y_all)
+        trained = {"evaluation": eval_res, "model": final_model}
+        if len(_TRAINED_MODEL_CACHE) >= 64:
+            _TRAINED_MODEL_CACHE.pop(next(iter(_TRAINED_MODEL_CACHE)))
+        _TRAINED_MODEL_CACHE[train_key] = trained
+    eval_res = trained["evaluation"]
+    final_model = trained["model"]
+    scoped = fetch_frame(db, table_name, node, cutoff - timedelta(days=7), cutoff, cutoff)
+    served_entities = set(extract_entity_series(scoped, entity_key, metric))
 
     # 3. Forecast weather forward to drive future predictions
     future_weather = forecast_weather(db, cutoff, horizon_hours=24)
@@ -580,6 +633,8 @@ def fit_and_serve_global_model(
     pred_feats = []
 
     for ent in entities:
+        if ent not in served_entities:
+            continue
         s = series_map.get(ent)
         sub = s[s.index <= cutoff] if s is not None else pd.Series()
         lag_1 = float(sub.iloc[-1]) if len(sub) > 0 else 0.0
@@ -617,7 +672,8 @@ def fit_and_serve_global_model(
     # Single batch predict if ML served
     raw_preds = None
     if eval_res["is_ml_served"] and final_model is not None and pred_feats:
-        raw_preds = final_model.predict(np.array(pred_feats, dtype=float))
+        with threadpool_limits(limits=1):
+            raw_preds = final_model.predict(np.array(pred_feats, dtype=float))
 
     entity_series_map: dict[str, list[dict[str, Any]]] = {ent: [] for ent in entities}
     for i, (ent, h, target_ts, q_lo, q_hi, lag_168, lag_24, lag_1) in enumerate(pred_meta):
@@ -649,6 +705,8 @@ def fit_and_serve_global_model(
         })
 
     for ent in entities:
+        if ent not in served_entities:
+            continue
         outputs.append({
             "entity_id": ent,
             "model": eval_res["served_model"],
@@ -687,13 +745,17 @@ def fit_and_serve_global_model(
         a_table = get_table("forecast_accuracy")
         if m_table is not None and f_table is not None and a_table is not None:
             # Model
-            db.execute(delete(m_table).where(m_table.c.target == target_id, m_table.c.trained_at == cutoff))
+            model_id = f"{target_id}|{cutoff.isoformat()}|{node}|24h"
+            db.execute(delete(m_table).where(m_table.c.model_id == model_id))
             db.execute(insert(m_table).values(
-                model_id=f"{target_id}|{cutoff.isoformat()}",
+                model_id=model_id,
                 target=target_id,
                 trained_at=cutoff,
-                train_end=cutoff,
-                params={"served_model": eval_res["served_model"], "mae": eval_res["overall_mae"]}
+                train_end=train_end,
+                params={"node": node, "horizon": "24h", "served_model": eval_res["served_model"],
+                        "mae": eval_res["overall_mae"], "baseline_mae": eval_res["best_baseline_mae"],
+                        "smape": eval_res["overall_smape"], "fold_results": eval_res["fold_results"],
+                        "max_iter": 60, "max_leaf_nodes": 15, "categorical_features": [0]}
             ))
             # Accuracy
             db.execute(delete(a_table).where(a_table.c.target == target_id))
@@ -705,16 +767,15 @@ def fit_and_serve_global_model(
                     mae=f["mae"],
                     smape=f["smape"],
                     baseline_mae=f["baseline_mae"],
-                    band_coverage=90.0,
+                    band_coverage=f.get("band_coverage"),
                 ))
             # Forecasts
-            db.execute(delete(f_table).where(f_table.c.target == target_id, f_table.c.issued_at == cutoff))
             ins_rows = []
             for out in outputs:
                 for item in out["series"]:
                     ts_val = datetime.fromisoformat(item["timestamp"])
                     ins_rows.append({
-                        "forecast_id": f"{target_id}|{out['entity_id']}|{cutoff.isoformat()}|{ts_val.isoformat()}",
+                        "forecast_id": f"{target_id}|{out['entity_id']}|{cutoff.isoformat()}|{ts_val.isoformat()}|24h",
                         "target": target_id,
                         "entity": out["entity_id"],
                         "issued_at": cutoff,
@@ -726,12 +787,18 @@ def fit_and_serve_global_model(
                         "served_model": eval_res["served_model"],
                     })
             if ins_rows:
+                identifiers = [row["forecast_id"] for row in ins_rows]
+                db.execute(delete(f_table).where(f_table.c.forecast_id.in_(
+                    identifiers + [identifier.rsplit("|", 1)[0] for identifier in identifiers])))
                 db.execute(insert(f_table), ins_rows)
             db.commit()
     except Exception:
         db.rollback()
+        raise
 
-    _GLOBAL_MODEL_CACHE[cache_key] = result
+    if len(_GLOBAL_MODEL_CACHE) >= 256:
+        _GLOBAL_MODEL_CACHE.pop(next(iter(_GLOBAL_MODEL_CACHE)))
+    _GLOBAL_MODEL_CACHE[cache_key] = deepcopy(result)
     return result
 
 
@@ -739,25 +806,80 @@ def fit_and_serve_global_model(
 # Domain Specialized Target Engines
 # =========================================================================
 
+def forecast_daily_baseline(db: Session, domain: str, table: str, entity_key: str | None,
+                            metric: str, node: str, as_of: datetime) -> dict[str, Any]:
+    """Seven full calendar days based on completed historical days only."""
+    cutoff = hour(as_of)
+    raw = fetch_frame(db, table, node, cutoff - timedelta(days=28), cutoff, cutoff)
+    outputs = []
+    aggregation = "max" if metric == "peak_demand_kw" else (
+        "mean" if metric in {"occupancy_count", "temperature", "humidity", "wind_speed"} else "sum")
+    for entity, values in extract_entity_series(raw, entity_key, metric).items():
+        complete = values[values.index.date < cutoff.date()]
+        daily = complete.groupby(complete.index.date).agg(aggregation)
+        if daily.empty:
+            continue
+        rows = []
+        for offset in range(1, 8):
+            day = cutoff.date() + timedelta(days=offset)
+            source_day = day - timedelta(days=7)
+            while source_day >= cutoff.date():
+                source_day -= timedelta(days=7)
+            value = float(daily.get(source_day, daily.iloc[-1]))
+            rows.append({"timestamp": day.isoformat(), "value": value,
+                         "lower": max(0.0, value * 0.9), "upper": max(0.0, value * 1.1)})
+        outputs.append({"entity_id": entity, "model": "seasonal", "mae": None,
+                        "baseline_mae": None, "series": rows})
+    return {"domain": domain, "metric": metric, "node": node, "as_of": cutoff.isoformat(),
+            "horizon": "7d", "forecasts": outputs, "data_source": data_source(domain)}
+
+
+def simulate_tank_hour(level: float, capacity: float, pump: bool, use_kl: float) -> tuple[float, bool, float]:
+    """Consume water, start below 40%, refill at capacity/6, and stop at 85%."""
+    if capacity <= 0:
+        return 0.0, False, 0.0
+    level = max(0.0, level - max(0.0, use_kl))
+    if level < 0.4 * capacity:
+        pump = True
+    inflow = min(capacity / 6, max(0.0, 0.85 * capacity - level)) if pump else 0.0
+    level = min(capacity, level + inflow)
+    if level >= 0.85 * capacity:
+        pump = False
+    return level, pump, inflow
+
+
+def simulate_bin_hour(weight: float, capacity: float, generated_kg: float, timestamp: datetime,
+                      collection_delayed: bool = False) -> float:
+    if capacity <= 0:
+        return 0.0
+    return 0.0 if timestamp.hour in (6, 12, 18) and not collection_delayed else min(capacity, max(0.0, weight + generated_kg))
+
+
 def forecast_water_domain(db: Session, node: str, as_of: datetime, metric: str = "water_consumption_litres", model_cls: type = HistGradientBoostingRegressor) -> dict[str, Any]:
     cutoff = hour(as_of)
     ml_res = fit_and_serve_global_model(
         db, "water_consumption_litres", "water", "water_hourly", "meter_id", "water_consumption_litres", node, as_of, model_cls=model_cls
     )
-    if metric == "tank_level_pct":
+    if metric in ("tank_level_pct", "days_of_water_available"):
         # Simulate tank levels forward
         tanks_raw = fetch_frame(db, "water_tank_levels", node, cutoff - timedelta(hours=24), cutoff, cutoff)
-        tank_capacities = {"TANK_A": 141.2, "TANK_B": 94.1, "TANK_C": 78.4}
+        registry = fetch_frame(db, "registry_tanks", node, cutoff - timedelta(days=1), cutoff, cutoff)
+        tank_capacities = {str(row.tank_id): float(row.tank_capacity_kl) for row in registry.itertuples()}
+        if not tanks_raw.empty:
+            for row in tanks_raw.sort_values("timestamp").itertuples():
+                tank_capacities[str(row.tank_id)] = float(row.tank_capacity_kl)
+        tank_capacities = {tank: capacity for tank, capacity in tank_capacities.items()
+                           if not tanks_raw.empty and tank in set(tanks_raw["tank_id"].astype(str))}
         total_cap = sum(tank_capacities.values())
 
         # Initial tank states
-        curr_levels = {"TANK_A": 115.0, "TANK_B": 60.0, "TANK_C": 40.0}
-        curr_pumps = {"TANK_A": False, "TANK_B": False, "TANK_C": False}
+        curr_levels = {tank: 0.0 for tank in tank_capacities}
+        curr_pumps = {tank: False for tank in tank_capacities}
         if not tanks_raw.empty:
             for t_id in tank_capacities:
                 t_sub = tanks_raw[tanks_raw["tank_id"] == t_id]
                 if not t_sub.empty:
-                    last_row = t_sub.iloc[-1]
+                    last_row = t_sub.sort_values("timestamp").iloc[-1]
                     curr_levels[t_id] = float(last_row.get("tank_level", curr_levels[t_id]))
                     curr_pumps[t_id] = bool(last_row.get("pump_on", 0))
 
@@ -771,13 +893,12 @@ def forecast_water_domain(db: Session, node: str, as_of: datetime, metric: str =
         for t_id, cap in tank_capacities.items():
             lvl = curr_levels[t_id]
             pump = curr_pumps[t_id]
-            cap_share = cap / total_cap
+            cap_share = cap / total_cap if total_cap else 0.0
             series_rows = []
             for h in range(24):
                 ts = cutoff + timedelta(hours=h + 1)
                 outflow_kl = (total_hourly_litres[h] / 1000.0) * cap_share
-                inflow_kl = 25.0 * cap_share if pump else 0.0
-                lvl = max(0.0, min(cap, lvl - outflow_kl + inflow_kl))
+                lvl, pump, inflow_kl = simulate_tank_hour(lvl, cap, pump, outflow_kl)
                 pct = (lvl / cap) * 100.0
 
                 # Pump rule: start < 40%, stop >= 85%
@@ -793,17 +914,27 @@ def forecast_water_domain(db: Session, node: str, as_of: datetime, metric: str =
                     "value": round(pct, 2),
                     "lower": round(lo, 2),
                     "upper": round(hi, 2),
+                    "pump_on": pump,
+                    "pump_inflow_kl": inflow_kl,
                 })
             tank_outputs.append({
                 "entity_id": t_id,
                 "model": "simulated",
-                "mae": 1.5,
-                "baseline_mae": 2.0,
+                "mae": None,
+                "baseline_mae": None,
                 "series": series_rows,
             })
 
         total_daily_use_kl = sum(total_hourly_litres) / 1000.0
-        days_avail = round(total_cap / max(total_daily_use_kl, 1.0), 2)
+        days_avail = sum(curr_levels.values()) / total_daily_use_kl if total_daily_use_kl > 0 else None
+        if metric == "days_of_water_available":
+            rows = [] if days_avail is None else [{"timestamp": (cutoff + timedelta(hours=h)).isoformat(),
+                "value": max(0.0, days_avail - h / 24), "lower": max(0.0, days_avail - h / 24),
+                "upper": max(0.0, days_avail - h / 24)} for h in range(1, 25)]
+            return {"domain": "water", "metric": metric, "node": node, "as_of": cutoff.isoformat(),
+                    "days_of_water_available": days_avail, "data_source": data_source("water"),
+                    "forecasts": [{"entity_id": node, "model": "formula", "mae": None,
+                                   "baseline_mae": None, "series": rows}] if rows else []}
 
         return {
             "domain": "water",
@@ -814,8 +945,8 @@ def forecast_water_domain(db: Session, node: str, as_of: datetime, metric: str =
             "forecasts": tank_outputs,
             "data_source": data_source("water"),
             "model": "simulated",
-            "mae": 1.5,
-            "baseline_mae": 2.0,
+            "mae": None,
+            "baseline_mae": None,
             "series": tank_outputs[0]["series"] if tank_outputs else [],
         }
 
@@ -872,7 +1003,7 @@ def forecast_waste_domain(db: Session, node: str, as_of: datetime, metric: str =
         if not waste_raw.empty:
             b_sub = waste_raw[waste_raw["bin_id"] == b_id]
             if not b_sub.empty:
-                last_r = b_sub.iloc[-1]
+                last_r = b_sub.sort_values("timestamp").iloc[-1]
                 curr_fill = float(last_r.get("fill_percentage", curr_fill))
                 curr_weight = (curr_fill / 100.0) * cap
 
@@ -883,10 +1014,7 @@ def forecast_waste_domain(db: Session, node: str, as_of: datetime, metric: str =
             t_dt = datetime.fromisoformat(item["timestamp"])
             h_val = t_dt.hour
             # Pickup at 06:00, 12:00, 18:00 resets weight and fill %
-            if h_val in (6, 12, 18):
-                w = 0.0
-            else:
-                w += item["value"]
+            w = simulate_bin_hour(w, cap, item["value"], t_dt)
 
             fill_pct = min(150.0, (w / cap) * 100.0)
             if fill_pct >= 100.0 and pred_overflow is None:
@@ -902,7 +1030,7 @@ def forecast_waste_domain(db: Session, node: str, as_of: datetime, metric: str =
                 })
 
             lo = max(0.0, fill_pct * 0.9)
-            hi = fill_pct * 1.1
+            hi = min(100.0, fill_pct * 1.1)
             series_rows.append({
                 "timestamp": item["timestamp"],
                 "value": round(fill_pct, 1),
@@ -915,8 +1043,8 @@ def forecast_waste_domain(db: Session, node: str, as_of: datetime, metric: str =
             "model": "simulated",
             "capacity_kg": cap,
             "predicted_overflow_time": pred_overflow,
-            "mae": 2.5,
-            "baseline_mae": 3.0,
+            "mae": None,
+            "baseline_mae": None,
             "series": series_rows,
         })
 
@@ -930,19 +1058,25 @@ def forecast_waste_domain(db: Session, node: str, as_of: datetime, metric: str =
             "forecasts": sim_outputs,
             "data_source": data_source("waste"),
             "model": "simulated",
-            "mae": 2.5,
-            "baseline_mae": 3.0,
+            "mae": None,
+            "baseline_mae": None,
             "series": sim_outputs[0]["series"] if sim_outputs else [],
         }
 
-    # Diversion rate calculation
-    total_w = sum(sum(s["value"] for s in fc["series"]) for fc in ml_res.get("forecasts", []))
-    recycled_w = sum(sum(s["value"] for s in fc["series"]) for fc in ml_res.get("forecasts", []) if "recycl" in fc["entity_id"].lower() or "org" in fc["entity_id"].lower())
-    div_rate = round((recycled_w / max(total_w, 1.0)) * 100.0, 1)
-
-    res = {**ml_res}
-    res["diversion_rate"] = div_rate
-    res["overflow_risks"] = risks_overflow
+    bin_types = {str(row.bin_id): str(row.bin_type).lower() for row in bins_reg.itertuples()}
+    diversion = []
+    for index in range(24):
+        points = [(fc, fc["series"][index]) for fc in ml_res.get("forecasts", []) if len(fc["series"]) > index]
+        if not points:
+            continue
+        total_weight = sum(point["value"] for _, point in points)
+        diverted = sum(point["value"] for fc, point in points if bin_types.get(fc["entity_id"]) in {"recyclable", "recyclables", "recycling", "organic"})
+        rate = diverted / total_weight if total_weight > 0 else 0.0
+        diversion.append({"timestamp": points[0][1]["timestamp"], "value": rate, "lower": rate, "upper": rate})
+    res = {**ml_res, "diversion_rate": diversion[-1]["value"] if diversion else None, "overflow_risks": risks_overflow}
+    if metric == "diversion_rate":
+        res.update({"metric": metric, "model": "formula", "forecasts": [{"entity_id": node, "model": "formula",
+                    "mae": None, "baseline_mae": None, "series": diversion}] if diversion else [], "series": diversion})
     return res
 
 
@@ -951,18 +1085,19 @@ def forecast_energy_domain(db: Session, node: str, as_of: datetime, metric: str 
     target_id = "peak_demand_kw" if metric == "peak_demand_kw" else "energy_kwh"
     ml_res = fit_and_serve_global_model(
         db, target_id, "energy", "energy_building_hourly", "building_id", target_id, node, as_of, model_cls=model_cls
-    )
+    ) if horizon == "24h" else forecast_daily_baseline(
+        db, "energy", "energy_building_hourly", "building_id", target_id, node, as_of)
 
     # Floor forecasts = building forecast * current floor share
-    floor_raw = fetch_frame(db, "energy_floor_hourly", node, cutoff - timedelta(hours=24), cutoff, cutoff)
+    floor_raw = fetch_frame(db, "energy_floor_hourly", "F01", cutoff - timedelta(hours=24), cutoff, cutoff)
     bldg_raw = fetch_frame(db, "energy_building_hourly", node, cutoff - timedelta(hours=24), cutoff, cutoff)
     floor_shares: dict[str, dict[str, float]] = {}
     if not floor_raw.empty and not bldg_raw.empty:
-        b_totals = bldg_raw.groupby("building_id")["energy_kwh"].sum()
+        b_totals = floor_raw.groupby("building_id")["energy_kwh"].sum()
         f_totals = floor_raw.groupby(["building_id", "floor_id"])["energy_kwh"].sum()
         for (b_id, f_id), f_val in f_totals.items():
             b_val = b_totals.get(b_id, 0.0)
-            share = (f_val / b_val) if b_val > 0 else 0.25
+            share = (f_val / b_val) if b_val > 0 else 1.0 / max(len(f_totals.loc[b_id]), 1)
             floor_shares.setdefault(str(b_id), {})[str(f_id)] = share
 
     floor_forecasts = []
@@ -973,58 +1108,22 @@ def forecast_energy_domain(db: Session, node: str, as_of: datetime, metric: str 
             for f_id, sh in shares.items():
                 f_series = []
                 for item in fc.get("series", []):
-                    f_val = round(item["value"] * sh, 3)
+                    f_val = item["value"] * sh
                     f_series.append({
                         "timestamp": item["timestamp"],
                         "value": f_val,
-                        "lower": round(item["lower"] * sh, 3),
-                        "upper": round(item["upper"] * sh, 3),
+                        "lower": item["lower"] * sh,
+                        "upper": item["upper"] * sh,
                     })
                 floor_forecasts.append({
                     "entity_id": f_id,
                     "building_id": b_id,
                     "floor_share": sh,
                     "model": fc["model"],
-                    "mae": round(fc["mae"] * sh, 3) if fc.get("mae") else 0.5,
-                    "baseline_mae": round(fc["baseline_mae"] * sh, 3) if fc.get("baseline_mae") else 0.5,
+                    "mae": fc["mae"] * sh if fc.get("mae") is not None else None,
+                    "baseline_mae": fc["baseline_mae"] * sh if fc.get("baseline_mae") is not None else None,
                     "series": f_series,
                 })
-
-    # If 7d horizon is requested
-    if horizon == "7d":
-        daily_outputs = []
-        for fc in ml_res.get("forecasts", []):
-            series_24 = fc.get("series", [])
-            mean_daily = sum(s["value"] for s in series_24)
-            daily_series = []
-            for d in range(1, 8):
-                day_ts = cutoff.date() + timedelta(days=d)
-                # seasonal drift
-                mult = 1.0 + 0.02 * math.sin(d)
-                d_val = round(mean_daily * mult, 2)
-                daily_series.append({
-                    "timestamp": day_ts.isoformat(),
-                    "value": d_val,
-                    "lower": round(d_val * 0.9, 2),
-                    "upper": round(d_val * 1.1, 2),
-                })
-            daily_outputs.append({
-                "entity_id": fc["entity_id"],
-                "model": fc["model"],
-                "mae": fc["mae"],
-                "baseline_mae": fc["baseline_mae"],
-                "series": daily_series,
-            })
-        return {
-            "domain": "energy",
-            "metric": metric,
-            "node": node,
-            "as_of": cutoff.isoformat(),
-            "horizon": "7d",
-            "forecasts": daily_outputs,
-            "floor_forecasts": floor_forecasts,
-            "data_source": data_source("energy"),
-        }
 
     res = {**ml_res}
     res["floor_forecasts"] = floor_forecasts
@@ -1035,15 +1134,17 @@ def forecast_mobility_domain(db: Session, node: str, as_of: datetime, metric: st
     cutoff = hour(as_of)
     target_id = "vehicle_count" if metric == "vehicle_count" else ("delay_min" if metric == "delay_min" else "parking_occupancy")
     ml_res = fit_and_serve_global_model(
-        db, target_id, "mobility", "traffic_parking", "gate_id", target_id, node, as_of, model_cls=model_cls
+        db, "traffic_vehicle_count" if target_id == "vehicle_count" else ("traffic_delay_min" if target_id == "delay_min" else target_id), "mobility", "traffic_parking", "gate_id", target_id, node, as_of, model_cls=model_cls
     )
     # Parking percentage calculation
-    capacity_map = {"West": 350.0, "Main": 500.0, "East": 250.0}
+    latest = fetch_frame(db, "traffic_parking", node, cutoff - timedelta(days=1), cutoff, cutoff)
+    capacity_map = dict(latest.sort_values("timestamp").groupby("gate_id")["parking_capacity"].last()) if not latest.empty else {}
     for fc in ml_res.get("forecasts", []):
-        cap = capacity_map.get(fc["entity_id"], 350.0)
+        cap = float(capacity_map.get(fc["entity_id"], 0.0))
         fc["parking_capacity"] = cap
         for item in fc.get("series", []):
-            item["parking_percent"] = round((item["value"] / cap) * 100.0, 1)
+            if metric == "parking_occupancy":
+                item["parking_percent"] = round((item["value"] / cap) * 100.0, 1) if cap else None
 
     return ml_res
 
@@ -1051,121 +1152,106 @@ def forecast_mobility_domain(db: Session, node: str, as_of: datetime, metric: st
 def forecast_air_domain(db: Session, node: str, as_of: datetime, metric: str = "aqi_cpcb") -> dict[str, Any]:
     cutoff = hour(as_of)
     ml_res = fit_and_serve_global_model(
-        db, "air_quality", "air", "air_environment", "zone_id", metric, node, as_of
+        db, "air_quality" if metric == "aqi_cpcb" else metric, "air", "air_environment", "zone_id", metric, node, as_of
     )
     for fc in ml_res.get("forecasts", []):
         for item in fc.get("series", []):
-            item["aqi_category"] = aqi_category(item["value"])
+            if metric == "aqi_cpcb":
+                item["aqi_category"] = aqi_category(item["value"])
     return ml_res
+
+
+def climate_risk_values(temp_c: float, humidity: float, rainfall: float, rainfall_6h: float,
+                        drainage: float, low_lying: float, exposure: float) -> tuple[float, float]:
+    """Source formulas, verified against every historical weather/climate row."""
+    heat = max(0.0, min(100.0, (heat_index(temp_c, humidity) - 27.0) * 5.0))
+    rain_load = max(rainfall_6h / 6.0, rainfall * 0.4)
+    flood = max(0.0, min(100.0, rain_load * 50.0 * exposure * (1.0 + low_lying) / (10.0 + 0.5 * drainage)))
+    return heat, flood
 
 
 def forecast_climate_domain(db: Session, node: str, as_of: datetime) -> dict[str, Any]:
     cutoff = hour(as_of)
-    future_w = forecast_weather(db, cutoff, horizon_hours=24)
-    # Heat and flood risks
-    series_heat = []
-    series_flood = []
-    flood_accum = 0.0
-
-    for item in future_w.itertuples():
-        ts_str = item.Index.isoformat()
-        t_c = float(getattr(item, "temperature", 28.0))
-        rh = float(getattr(item, "humidity", 65.0))
-        rain = float(getattr(item, "rainfall", 0.0))
-
-        # Heat risk from heat index
-        hi_val = heat_index(t_c, rh)
-        h_risk = round(max(0.0, min(100.0, (hi_val - 27.0) * 5.0)), 1)
-        series_heat.append({
-            "timestamp": ts_str,
-            "value": h_risk,
-            "lower": max(0.0, round(h_risk - 5.0, 1)),
-            "upper": min(100.0, round(h_risk + 5.0, 1)),
-        })
-
-        # Flood risk: accumulates with rainfall, decays over time
-        if rain > 0:
-            flood_accum = min(100.0, flood_accum + (rain / 30.0) * 40.0)
-        else:
-            flood_accum = max(0.0, flood_accum - 5.0)
-        f_risk = round(flood_accum, 1)
-        series_flood.append({
-            "timestamp": ts_str,
-            "value": f_risk,
-            "lower": max(0.0, round(f_risk - 5.0, 1)),
-            "upper": min(100.0, round(f_risk + 5.0, 1)),
-        })
-
-    return {
-        "domain": "climate",
-        "node": node,
-        "as_of": cutoff.isoformat(),
-        "model": "formula",
-        "forecasts": [
-            {"entity_id": "Campus", "metric": "heat_risk", "model": "formula", "mae": 2.0, "baseline_mae": 3.0, "series": series_heat},
-            {"entity_id": "Campus", "metric": "flood_risk", "model": "formula", "mae": 2.0, "baseline_mae": 3.0, "series": series_flood},
-        ],
-        "data_source": data_source("climate"),
-        "series": series_heat,
-    }
-
-
-def forecast_emissions_domain(db: Session, node: str, as_of: datetime, horizon: str = "24h") -> dict[str, Any]:
-    cutoff = hour(as_of)
-    e_res = forecast_energy_domain(db, node, as_of, metric="energy_kwh", horizon=horizon)
-    # Emission factor: 0.716 kgCO2e/kWh / 1000 = tCO2e
-    GRID_FACTOR = 0.716 / 1000.0
-    VEHICLE_FACTOR = 0.25 / 1000.0
-    WASTE_FACTOR = 0.45 / 1000.0
-
+    future = forecast_weather(db, cutoff, horizon_hours=24)
+    historical = fetch_frame(db, "weather", "F01", cutoff - timedelta(hours=5), cutoff, cutoff)
+    registry = fetch_frame(db, "registry_zones_climate", node, cutoff - timedelta(days=1), cutoff, cutoff)
+    rainfall = list(historical.sort_values("timestamp")["rainfall"].tail(5)) if not historical.empty else []
+    rolling_rain = []
+    for item in future.itertuples():
+        rainfall.append(float(item.rainfall))
+        rainfall = rainfall[-6:]
+        rolling_rain.append(sum(rainfall))
     outputs = []
-    for fc in e_res.get("forecasts", []):
-        b_id = fc["entity_id"]
-        em_series = []
-        for s in fc.get("series", []):
-            energy_co2e = s["value"] * GRID_FACTOR
-            mob_co2e = 20.0 * VEHICLE_FACTOR
-            waste_co2e = 15.0 * WASTE_FACTOR
-            tot_co2e = energy_co2e + mob_co2e + waste_co2e
-            em_series.append({
-                "timestamp": s["timestamp"],
-                "value": round(tot_co2e, 4),
-                "lower": round(tot_co2e * 0.9, 4),
-                "upper": round(tot_co2e * 1.1, 4),
-                "energy_co2e": round(energy_co2e, 4),
-                "mobility_co2e": round(mob_co2e, 4),
-                "waste_co2e": round(waste_co2e, 4),
-            })
-        outputs.append({
-            "entity_id": b_id,
-            "model": "formula",
-            "mae": round(fc.get("mae", 1.0) * GRID_FACTOR, 4),
-            "baseline_mae": round(fc.get("baseline_mae", 1.0) * GRID_FACTOR, 4),
-            "series": em_series,
-        })
+    for zone in registry.itertuples():
+        heat_rows, flood_rows = [], []
+        for index, item in enumerate(future.itertuples()):
+            heat, flood = climate_risk_values(float(item.temperature), float(item.humidity), float(item.rainfall),
+                rolling_rain[index], float(zone.drainage_capacity), float(zone.low_lying_flag), float(zone.building_exposure))
+            for rows, value in ((heat_rows, heat), (flood_rows, flood)):
+                rows.append({"timestamp": item.Index.isoformat(), "value": value,
+                             "lower": max(0.0, value - 5), "upper": min(100.0, value + 5)})
+        for metric, rows in (("heat_risk", heat_rows), ("flood_risk", flood_rows)):
+            if rows:
+                outputs.append({"entity_id": str(zone.zone_id), "metric": metric, "model": "formula",
+                                "mae": None, "baseline_mae": None, "series": rows})
+    return {"domain": "climate", "node": node, "as_of": cutoff.isoformat(), "model": "formula",
+            "forecasts": outputs, "data_source": data_source("climate")}
 
-    return {
-        "domain": "emissions",
-        "node": node,
-        "as_of": cutoff.isoformat(),
-        "horizon": horizon,
-        "model": "formula",
-        "forecasts": outputs,
-        "data_source": data_source("emissions"),
-        "series": outputs[0]["series"] if outputs else [],
-    }
+
+def forecast_emissions_domain(db: Session, node: str, as_of: datetime, horizon: str = "24h", metric: str = "total_co2e") -> dict[str, Any]:
+    cutoff = hour(as_of)
+    energy = forecast_energy_domain(db, node, cutoff, horizon=horizon)
+    mobility = forecast_mobility_domain(db, "F01", cutoff, metric="vehicle_count") if horizon == "24h" else forecast_daily_baseline(
+        db, "mobility", "traffic_parking", "gate_id", "vehicle_count", "F01", cutoff)
+    waste = forecast_waste_domain(db, node, cutoff) if horizon == "24h" else forecast_daily_baseline(
+        db, "waste", "waste_hourly", "bin_id", "waste_weight", node, cutoff)
+    factors_raw = fetch_frame(db, "registry_emission_factors", "F01", cutoff - timedelta(days=1), cutoff, cutoff)
+    factors = {str(row.factor_name): float(row.value) for row in factors_raw.itertuples()}
+    if not all(name in factors for name in ("grid", "vehicle", "landfill")):
+        return {"domain": "emissions", "node": node, "as_of": cutoff.isoformat(), "horizon": horizon,
+                "forecasts": [], "data_source": data_source("emissions"), "status": "missing_emission_factors"}
+    bins = fetch_frame(db, "registry_bins", node, cutoff - timedelta(days=1), cutoff, cutoff)
+    bin_buildings = {str(row.bin_id): str(row.building_id) for row in bins.itertuples()}
+    historic = fetch_frame(db, "emissions", "F01", cutoff - timedelta(days=7), cutoff, cutoff)
+    weights = historic.groupby("building_id")["mobility_co2e"].sum() if not historic.empty else pd.Series(dtype=float)
+    weight_total = float(weights.sum())
+    building_count = max(len(energy.get("forecasts", [])), 1)
+    outputs = []
+    for building in energy.get("forecasts", []):
+        entity = building["entity_id"]
+        share = float(weights.get(entity, 0.0)) / weight_total if weight_total else 1 / building_count
+        rows = []
+        for index, point in enumerate(building["series"]):
+            parts = {}
+            intervals = {}
+            for field in ("value", "lower", "upper"):
+                values = {"energy_co2e": point[field] * factors["grid"],
+                          "mobility_co2e": sum(fc["series"][index][field] for fc in mobility.get("forecasts", [])) * share * factors["vehicle"],
+                          "waste_co2e": sum(fc["series"][index][field] for fc in waste.get("forecasts", [])
+                                             if bin_buildings.get(fc["entity_id"]) == entity) * factors["landfill"]}
+                values["total_co2e"] = sum(values.values())
+                intervals[field] = values[metric]
+                if field == "value":
+                    parts = values
+            rows.append({"timestamp": point["timestamp"], **intervals, **parts})
+        outputs.append({"entity_id": entity, "model": "formula", "mae": None, "baseline_mae": None, "series": rows})
+    return {"domain": "emissions", "metric": metric, "node": node, "as_of": cutoff.isoformat(),
+            "horizon": horizon, "model": "formula", "unit": "kgCO2e", "forecasts": outputs,
+            "data_source": data_source("emissions")}
 
 
 def forecast_assets_domain(db: Session, node: str, as_of: datetime) -> dict[str, Any]:
     cutoff = hour(as_of)
     assets_raw = fetch_frame(db, "assets_equipment", node, cutoff - timedelta(hours=48), cutoff, cutoff)
-    entities = sorted(assets_raw["asset_id"].dropna().unique().tolist()) if not assets_raw.empty else [f"AST{i:03d}" for i in range(1, 39)]
+    registry = fetch_frame(db, "registry_assets", node, cutoff - timedelta(days=1), cutoff, cutoff)
+    asset_registry = {str(row.asset_id): row for row in registry.itertuples()}
+    entities = sorted(assets_raw["asset_id"].dropna().unique().tolist()) if not assets_raw.empty else []
 
     outputs = []
     vibration_outputs = []
 
     for ast_id in entities:
-        sub = assets_raw[assets_raw["asset_id"] == ast_id] if not assets_raw.empty else pd.DataFrame()
+        sub = assets_raw[assets_raw["asset_id"] == ast_id].sort_values("timestamp") if not assets_raw.empty else pd.DataFrame()
         curr_vib = 2.1
         vib_slope = 0.01
         load_val = 0.65
@@ -1176,17 +1262,28 @@ def forecast_assets_domain(db: Session, node: str, as_of: datetime) -> dict[str,
             last_r = sub.iloc[-1]
             curr_vib = float(last_r.get("vibration", curr_vib))
             load_val = float(last_r.get("load", load_val))
-            down_hrs = float(last_r.get("downtime_hours", down_hrs))
+            down_hrs = float(pd.to_numeric(sub["downtime_hours"], errors="coerce").fillna(0).sum())
             ast_type = str(last_r.get("asset_type", ast_type))
-            if len(sub) >= 24:
-                vib_24 = float(sub.iloc[-24].get("vibration", curr_vib))
-                vib_slope = (curr_vib - vib_24) / 24.0
+            vibration = pd.to_numeric(sub["vibration"], errors="coerce")
+            usable = vibration.notna()
+            timestamps = sub.loc[usable, "timestamp"]
+            elapsed = (timestamps - timestamps.iloc[-1]).dt.total_seconds() / 3600.0 if len(timestamps) else pd.Series(dtype=float)
+            vib_slope = float(np.polyfit(elapsed, vibration[usable], 1)[0]) if len(elapsed) > 1 and elapsed.max() > elapsed.min() else 0.0
 
         # Rule score: vibration level and slope, hours since maintenance, load, past downtime
         vib_score = min(40.0, max(0.0, (curr_vib - 2.0) * 15.0 + max(0.0, vib_slope * 200.0)))
-        load_score = min(20.0, load_val * 20.0)
+        rated = float(last_r.get("rated_capacity") or 0.0)
+        load_score = min(20.0, max(0.0, load_val / rated * 20.0)) if rated > 0 else 0.0
         down_score = min(20.0, down_hrs * 2.5)
-        maint_score = 15.0  # nominal preventive interval
+        record = asset_registry.get(str(ast_id))
+        maintenance = pd.to_datetime(getattr(record, "last_service_date", None), errors="coerce")
+        if pd.notna(maintenance):
+            maintenance = maintenance.tz_localize(TZ) if maintenance.tzinfo is None else maintenance.tz_convert(TZ)
+            hours_since = max(0.0, (cutoff - maintenance).total_seconds() / 3600.0)
+            interval = max(1.0, float(getattr(record, "maintenance_interval_days", 30.0)))
+            maint_score = min(20.0, hours_since / (interval * 24.0) * 20.0)
+        else:
+            maint_score = 0.0
         failure_risk = round(min(100.0, max(0.0, vib_score + load_score + down_score + maint_score)), 1)
 
         risk_series = []
@@ -1203,12 +1300,12 @@ def forecast_assets_domain(db: Session, node: str, as_of: datetime) -> dict[str,
         outputs.append({
             "entity_id": ast_id,
             "asset_type": ast_type,
-            "failure_risk_24h": failure_risk,
+            "failure_risk_24h": max(point["value"] for point in risk_series),
             "model": "rule",
             "series": risk_series,
         })
 
-        if ast_type in ("HVAC", "Pump", "Chiller"):
+        if ast_type.lower() in ("hvac", "pump", "chiller"):
             vib_series = []
             for h in range(1, 25):
                 ts = cutoff + timedelta(hours=h)
@@ -1241,28 +1338,21 @@ def forecast_assets_domain(db: Session, node: str, as_of: datetime) -> dict[str,
 def forecast_safety_domain(db: Session, node: str, as_of: datetime) -> dict[str, Any]:
     cutoff = hour(as_of)
     future_w = forecast_weather(db, cutoff, horizon_hours=24)
-    # 7-day incident count per area
-    areas = ["North Walk", "South Walk", "East Plaza", "Central Mall"]
+    history_start = cutoff - timedelta(days=28)
+    history = fetch_frame(db, "safety_incidents", node, history_start, cutoff, cutoff)
+    registry = fetch_frame(db, "registry_outdoor_areas", node, history_start, cutoff, cutoff)
+    areas = sorted(set(registry.get("area_id", pd.Series(dtype=str)).dropna().astype(str)) |
+                   set(history.get("area_id", pd.Series(dtype=str)).dropna().astype(str)))
     outputs = []
-    for a in areas:
-        daily_series = []
-        for d in range(1, 8):
-            d_ts = cutoff.date() + timedelta(days=d)
-            # Poisson loss expectation ~0.2 per area per day
-            rate = 0.2
-            daily_series.append({
-                "timestamp": d_ts.isoformat(),
-                "value": round(rate, 2),
-                "lower": 0.0,
-                "upper": round(rate + 1.0, 2),
-            })
-        outputs.append({
-            "entity_id": a,
-            "model": "poisson",
-            "mae": 0.2,
-            "baseline_mae": 0.25,
-            "series": daily_series,
-        })
+    for area in areas:
+        count = int((history["area_id"].astype(str) == area).sum()) if not history.empty else 0
+        # Poisson maximum-likelihood rate includes days with zero incidents.
+        rate = count / 28.0
+        daily_series = [{"timestamp": (cutoff.date() + timedelta(days=d)).isoformat(),
+                         "value": rate, "lower": max(0.0, rate - 1.645 * math.sqrt(rate)),
+                         "upper": rate + 1.645 * math.sqrt(rate)} for d in range(1, 8)]
+        outputs.append({"entity_id": area, "model": "poisson", "mae": None,
+                        "baseline_mae": None, "series": daily_series})
 
     # Hourly risk index combining darkness and rain
     hourly_risk = []
@@ -1294,33 +1384,18 @@ def forecast_safety_domain(db: Session, node: str, as_of: datetime) -> dict[str,
 
 def forecast_sustainability_domain(db: Session, node: str, as_of: datetime) -> dict[str, Any]:
     cutoff = hour(as_of)
-    # 7-day projected score
-    daily_series = []
-    base_score = 78.4
-    for d in range(1, 8):
-        d_ts = cutoff.date() + timedelta(days=d)
-        proj = round(base_score + 0.3 * d, 1)
-        daily_series.append({
-            "timestamp": d_ts.isoformat(),
-            "value": proj,
-            "lower": round(proj - 2.0, 1),
-            "upper": round(proj + 2.0, 1),
-        })
-    return {
-        "domain": "sustainability",
-        "node": node,
-        "as_of": cutoff.isoformat(),
-        "model": "formula",
-        "forecasts": [{
-            "entity_id": "F01",
-            "model": "formula",
-            "mae": 1.2,
-            "baseline_mae": 1.5,
-            "series": daily_series,
-        }],
-        "data_source": data_source("sustainability"),
-        "series": daily_series,
-    }
+    history = fetch_frame(db, "sustainability", node, cutoff - timedelta(days=28), cutoff, cutoff)
+    latest = history[history["date"] == history["date"].max()] if not history.empty else history
+    base_score = calc_sustainability_score(latest)
+    daily_series = [] if base_score is None else [
+        {"timestamp": (cutoff.date() + timedelta(days=d)).isoformat(), "value": base_score,
+         "lower": base_score, "upper": base_score} for d in range(1, 8)]
+    return {"domain": "sustainability", "node": node, "as_of": cutoff.isoformat(),
+            "model": "seasonal", "projection": True,
+            "projection_basis": "Last observed score held constant; KPI score forecast formulas are unavailable",
+            "forecasts": [] if base_score is None else [{"entity_id": node, "model": "seasonal",
+                "mae": None, "baseline_mae": None, "series": daily_series}],
+            "data_source": data_source("sustainability"), "series": daily_series}
 
 
 # =========================================================================
@@ -1332,129 +1407,111 @@ def get_forecast_risks(db: Session, node: str, as_of: datetime) -> list[dict[str
     risks = []
 
     # 1. Energy peak over threshold (> 550 kW)
-    try:
-        e_fc = forecast_energy_domain(db, node, as_of, metric="peak_demand_kw")
-        for fc in e_fc.get("forecasts", []):
-            for s in fc.get("series", []):
-                if s["value"] > 550.0:
-                    t_dt = datetime.fromisoformat(s["timestamp"])
-                    lead_h = max(1, int((t_dt - cutoff).total_seconds() / 3600.0))
-                    risks.append({
-                        "type": "predicted_energy_peak",
-                        "node": fc["entity_id"],
-                        "domain": "energy",
-                        "predicted_time": s["timestamp"],
-                        "lead_time_hours": lead_h,
-                        "facts": {"peak_kw": s["value"], "threshold_kw": 550.0},
-                    })
-                    break
-    except Exception:
-        pass
+    e_fc = forecast_energy_domain(db, node, as_of, metric="peak_demand_kw")
+    for fc in e_fc.get("forecasts", []):
+        for s in fc.get("series", []):
+            if s["value"] > 550.0:
+                t_dt = datetime.fromisoformat(s["timestamp"])
+                lead_h = max(1, int((t_dt - cutoff).total_seconds() / 3600.0))
+                risks.append({
+                    "type": "predicted_energy_peak",
+                    "node": fc["entity_id"],
+                    "domain": "energy",
+                    "predicted_time": s["timestamp"],
+                    "lead_time_hours": lead_h,
+                    "facts": {"peak_kw": s["value"], "threshold_kw": 550.0},
+                })
+                break
 
     # 2. Waste overflow (first hour with fill >= 100%)
-    try:
-        w_fc = forecast_waste_domain(db, node, as_of, metric="fill_percentage")
-        risks.extend(w_fc.get("overflow_risks", []))
-    except Exception:
-        pass
+    w_fc = forecast_waste_domain(db, node, as_of, metric="fill_percentage")
+    risks.extend(w_fc.get("overflow_risks", []))
 
     # 3. Tank low (< 40%)
-    try:
-        t_fc = forecast_water_domain(db, node, as_of, metric="tank_level_pct")
-        for fc in t_fc.get("forecasts", []):
-            for s in fc.get("series", []):
-                if s["value"] < 40.0:
-                    t_dt = datetime.fromisoformat(s["timestamp"])
-                    lead_h = max(1, int((t_dt - cutoff).total_seconds() / 3600.0))
-                    risks.append({
-                        "type": "predicted_tank_low",
-                        "node": fc["entity_id"],
-                        "domain": "water",
-                        "predicted_time": s["timestamp"],
-                        "lead_time_hours": lead_h,
-                        "facts": {"tank_level_pct": s["value"]},
-                    })
-                    break
-    except Exception:
-        pass
+    t_fc = forecast_water_domain(db, node, as_of, metric="tank_level_pct")
+    for fc in t_fc.get("forecasts", []):
+        for s in fc.get("series", []):
+            if s["value"] < 40.0:
+                t_dt = datetime.fromisoformat(s["timestamp"])
+                lead_h = max(1, int((t_dt - cutoff).total_seconds() / 3600.0))
+                risks.append({
+                    "type": "predicted_tank_low",
+                    "node": fc["entity_id"],
+                    "domain": "water",
+                    "predicted_time": s["timestamp"],
+                    "lead_time_hours": lead_h,
+                    "facts": {"tank_level_pct": s["value"]},
+                })
+                break
 
     # 4. Parking above 80%
-    try:
-        m_fc = forecast_mobility_domain(db, node, as_of, metric="parking_occupancy")
-        for fc in m_fc.get("forecasts", []):
-            for s in fc.get("series", []):
-                if s.get("parking_percent", 0.0) >= 80.0:
-                    t_dt = datetime.fromisoformat(s["timestamp"])
-                    lead_h = max(1, int((t_dt - cutoff).total_seconds() / 3600.0))
-                    risks.append({
-                        "type": "predicted_parking_high",
-                        "node": fc["entity_id"],
-                        "domain": "mobility",
-                        "predicted_time": s["timestamp"],
-                        "lead_time_hours": lead_h,
-                        "facts": {"parking_percent": s["parking_percent"]},
-                    })
-                    break
-    except Exception:
-        pass
+    m_fc = forecast_mobility_domain(db, node, as_of, metric="parking_occupancy")
+    for fc in m_fc.get("forecasts", []):
+        for s in fc.get("series", []):
+            if s.get("parking_percent") is not None and s["parking_percent"] >= 80.0:
+                t_dt = datetime.fromisoformat(s["timestamp"])
+                lead_h = max(1, int((t_dt - cutoff).total_seconds() / 3600.0))
+                risks.append({
+                    "type": "predicted_parking_high",
+                    "node": fc["entity_id"],
+                    "domain": "mobility",
+                    "predicted_time": s["timestamp"],
+                    "lead_time_hours": lead_h,
+                    "facts": {"parking_percent": s["parking_percent"]},
+                })
+                break
 
     # 5. AQI above 200
-    try:
-        a_fc = forecast_air_domain(db, node, as_of, metric="aqi_cpcb")
-        for fc in a_fc.get("forecasts", []):
-            for s in fc.get("series", []):
-                if s["value"] > 200.0:
-                    t_dt = datetime.fromisoformat(s["timestamp"])
-                    lead_h = max(1, int((t_dt - cutoff).total_seconds() / 3600.0))
-                    risks.append({
-                        "type": "predicted_air_poor",
-                        "node": fc["entity_id"],
-                        "domain": "air",
-                        "predicted_time": s["timestamp"],
-                        "lead_time_hours": lead_h,
-                        "facts": {"aqi": s["value"], "category": s.get("aqi_category", "Poor")},
-                    })
-                    break
-    except Exception:
-        pass
+    a_fc = forecast_air_domain(db, node, as_of, metric="aqi_cpcb")
+    for fc in a_fc.get("forecasts", []):
+        for s in fc.get("series", []):
+            if s["value"] > 200.0:
+                t_dt = datetime.fromisoformat(s["timestamp"])
+                lead_h = max(1, int((t_dt - cutoff).total_seconds() / 3600.0))
+                risks.append({
+                    "type": "predicted_air_poor",
+                    "node": fc["entity_id"],
+                    "domain": "air",
+                    "predicted_time": s["timestamp"],
+                    "lead_time_hours": lead_h,
+                    "facts": {"aqi": s["value"], "category": s.get("aqi_category", "Poor")},
+                })
+                break
 
     # 6. Heat or Flood risk high (> 60) & Heavy rain readiness
-    try:
-        c_fc = forecast_climate_domain(db, node, as_of)
-        for fc in c_fc.get("forecasts", []):
-            for s in fc.get("series", []):
-                if s["value"] >= 60.0:
-                    t_dt = datetime.fromisoformat(s["timestamp"])
-                    lead_h = max(1, int((t_dt - cutoff).total_seconds() / 3600.0))
-                    r_type = "predicted_heat_risk" if fc["metric"] == "heat_risk" else "predicted_flood_risk"
-                    risks.append({
-                        "type": r_type,
-                        "node": fc["entity_id"],
-                        "domain": "climate",
-                        "predicted_time": s["timestamp"],
-                        "lead_time_hours": lead_h,
-                        "facts": {"risk_value": s["value"], "metric": fc["metric"]},
-                    })
-                    break
-    except Exception:
-        pass
+    c_fc = forecast_climate_domain(db, node, as_of)
+    for fc in c_fc.get("forecasts", []):
+        for s in fc.get("series", []):
+            if s["value"] >= 60.0:
+                t_dt = datetime.fromisoformat(s["timestamp"])
+                lead_h = max(1, int((t_dt - cutoff).total_seconds() / 3600.0))
+                r_type = "predicted_heat_risk" if fc["metric"] == "heat_risk" else "predicted_flood_risk"
+                risks.append({
+                    "type": r_type,
+                    "node": fc["entity_id"],
+                    "domain": "climate",
+                    "predicted_time": s["timestamp"],
+                    "lead_time_hours": lead_h,
+                    "facts": {"risk_value": s["value"], "metric": fc["metric"]},
+                })
+                break
 
     # 7. Asset failure risk above 70
-    try:
-        ast_fc = forecast_assets_domain(db, node, as_of)
-        for fc in ast_fc.get("forecasts", []):
-            if fc.get("failure_risk_24h", 0.0) >= 70.0:
-                s0 = fc["series"][0] if fc.get("series") else {"timestamp": (cutoff + timedelta(hours=1)).isoformat()}
-                risks.append({
-                    "type": "predicted_asset_risk",
-                    "node": fc["entity_id"],
-                    "domain": "assets",
-                    "predicted_time": s0["timestamp"],
-                    "lead_time_hours": 1,
-                    "facts": {"failure_risk": fc["failure_risk_24h"], "asset_type": fc.get("asset_type")},
-                })
-    except Exception:
-        pass
+    ast_fc = forecast_assets_domain(db, node, as_of)
+    for fc in ast_fc.get("forecasts", []):
+        if fc.get("failure_risk_24h", 0.0) > 70.0:
+            s0 = next((point for point in fc.get("series", []) if point["value"] > 70.0), None)
+            if s0 is None:
+                continue
+            lead = max(1, int((datetime.fromisoformat(s0["timestamp"]) - cutoff).total_seconds() / 3600))
+            risks.append({
+                "type": "predicted_asset_risk",
+                "node": fc["entity_id"],
+                "domain": "assets",
+                "predicted_time": s0["timestamp"],
+                "lead_time_hours": lead,
+                "facts": {"failure_risk": fc["failure_risk_24h"], "asset_type": fc.get("asset_type")},
+            })
 
     return risks
 

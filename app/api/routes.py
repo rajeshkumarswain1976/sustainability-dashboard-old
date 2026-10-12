@@ -21,10 +21,10 @@ from app.analytics.repository import location_tree
 from app.analytics.forecast import (
     forecast as build_forecast,
     catalogue as get_forecast_catalogue,
-    accuracy as get_forecast_accuracy,
+    accuracy_at as get_forecast_accuracy,
     risks as get_forecast_risks,
 )
-from app.api.schemas import dashboard_payload
+from app.api.schemas import dashboard_payload, ForecastResponse
 from app.config import settings
 from app.db import check_database, get_session, runtime_engine
 from app.engine import pipeline, replay
@@ -340,7 +340,7 @@ def forecast_accuracy_endpoint(
 ):
     state = replay.load_state(session)
     cutoff = _normalize_time(as_of) if as_of else _normalize_time(datetime.fromisoformat(state["cursor"]))
-    return {"as_of": cutoff.isoformat(), "node": node, "targets": get_forecast_accuracy(session=session), "data_source": data_source("system")}
+    return {"as_of": cutoff.isoformat(), "node": node, "targets": get_forecast_accuracy(node=node, as_of=cutoff, session=session), "data_source": data_source("system")}
 
 
 @router.get("/forecast/risks")
@@ -355,7 +355,7 @@ def forecast_risks_endpoint(
     return {"as_of": cutoff.isoformat(), "node": node, "risks": detected, "count": len(detected), "data_source": data_source("system")}
 
 
-@router.get("/forecast/{domain}")
+@router.get("/forecast/{domain}", response_model=ForecastResponse)
 def forecast_endpoint(
     domain: str,
     node: str = Query("F01"),
@@ -368,6 +368,8 @@ def forecast_endpoint(
     cutoff = _normalize_time(as_of) if as_of else _normalize_time(datetime.fromisoformat(state["cursor"]))
     try:
         return build_forecast(domain, node, cutoff, session=session, metric=metric, horizon=horizon)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Target or location was not found") from exc
 
