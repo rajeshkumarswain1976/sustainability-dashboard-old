@@ -4,6 +4,9 @@ Contract: https://docs.typesafe.ai/api and https://docs.typesafe.ai/models
 """
 from __future__ import annotations
 
+from copy import deepcopy
+from threading import RLock
+import math
 import hashlib
 import json
 import time
@@ -19,6 +22,7 @@ from app.config import ROOT_DIR, settings
 JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone"
 JEV_MODEL = "jev-1.13.0"
 _cache: dict[str, dict[str, Any]] = {}
+_cache_lock = RLock()
 
 
 @lru_cache(maxsize=1)
@@ -42,14 +46,14 @@ def state_hash(state: dict[str, Any], points: list[str]) -> str:
     return hashlib.sha256(encoded.encode()).hexdigest()
 
 
-def decide_many(points: list[str], state: dict[str, Any]) -> dict[str, Any]:
+def _decide_many(points: list[str], state: dict[str, Any]) -> dict[str, Any]:
     if not settings.jev_api_key:
         raise RuntimeError("JEV_API_KEY is not configured")
     if len(points) > 20:
         raise ValueError("Jev supports at most 20 questions per request")
     key = state_hash(state, points)
     if key in _cache:
-        return {"answers": _cache[key]["answers"], "model": _cache[key]["model"], "cached": True}
+        return {**deepcopy(_cache[key]), "cached": True}
     body = {"model": JEV_MODEL, "state": state, "questions": {point: question(point) for point in points}}
     endpoint = (settings.jev_base_url or JEV_ENDPOINT).rstrip("/")
     if not endpoint.endswith("/v1/systemone"):
@@ -66,14 +70,52 @@ def decide_many(points: list[str], state: dict[str, Any]) -> dict[str, Any]:
                 answers = payload["answers"]
                 if not isinstance(answers, dict) or any(point not in answers for point in points):
                     raise ValueError("Jev response omitted a requested answer")
-                result = {"answers": answers, "model": payload["model"]}
+                if payload.get("model") != JEV_MODEL:
+                    raise ValueError("Jev response used an unexpected model version")
+                for point in points:
+                    validate_answer(point, answers[point])
+                if len(_cache) >= 1024:
+                    _cache.pop(next(iter(_cache)))
+                result = {"answers": deepcopy(answers), "model": payload["model"]}
                 _cache[key] = result
-                return {**result, "cached": False}
+                return {**deepcopy(result), "cached": False}
             except (httpx.TimeoutException, httpx.TransportError, httpx.HTTPStatusError):
                 if attempt == 2:
                     raise
                 time.sleep(0.1 * (2 ** attempt))
     raise RuntimeError("Jev did not return a decision")
+
+
+def validate_answer(point: str, answer: dict[str, Any]) -> None:
+    config = catalogue()["decisions"][point]
+    expected = {"yesno": "noul"}.get(config["kind"], config["kind"])
+    if not isinstance(answer, dict) or answer.get("type") != expected:
+        raise ValueError("Jev answer type does not match its question")
+    def numeric(value):
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    if expected == "noul":
+        if not numeric(answer.get("noul")) or not 0 <= answer["noul"] <= 1:
+            raise ValueError("Invalid Jev yes/no probability")
+        return
+    probabilities = answer.get("probabilities")
+    confidence = answer.get("confidence")
+    if not numeric(confidence) or not 0 <= confidence <= 1:
+        raise ValueError("Invalid Jev confidence")
+    allowed = set(config["options"]) if expected == "choice" else {str(index) for index in range(len(config["options"]))}
+    if not isinstance(probabilities, dict) or set(probabilities) != allowed:
+        raise ValueError("Jev probability options do not match the question")
+    if any(not numeric(value) or not 0 <= value <= 1 for value in probabilities.values()) or not math.isclose(sum(probabilities.values()), 1.0, abs_tol=0.001):
+        raise ValueError("Invalid Jev probability distribution")
+    if expected == "choice" and answer.get("choice") not in allowed:
+        raise ValueError("Jev returned an unknown choice")
+    if expected == "score" and (not numeric(answer.get("score")) or not 0 <= answer["score"] <= len(allowed) - 1):
+        raise ValueError("Jev score is outside its rubric")
+
+
+def decide_many(points: list[str], state: dict[str, Any]) -> dict[str, Any]:
+    # Serialize cache misses so concurrent identical states issue one request.
+    with _cache_lock:
+        return _decide_many(points, state)
 
 
 def clear_cache() -> None:

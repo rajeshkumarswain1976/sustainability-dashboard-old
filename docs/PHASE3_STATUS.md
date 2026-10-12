@@ -33,10 +33,10 @@ Preserve those files. No truncated modules found; backend tests and frontend bui
 | B9 SSE bell/popup/reconnect | DONE | EventSource tick, popup, reconnect and alerts-since catch-up implemented; isolated streaming test follows. |
 | B10 Shared score/counts | DONE | Header and overview read the same backend score/counts; bell filters active alert statuses. |
 | C1 Official Jev contract | DONE | Official API/model pages reachable; existing transport shape matches documented primitives. |
-| C2 Decision YAML catalogue | PARTIAL | All decision points exist with global thresholds; per-point thresholds and copilot yes/no mismatch need fixes. |
-| C3 Jev transport | PARTIAL | Single module, pin, timeout/retries/batching/cache exist; validate response types/probabilities and error handling. |
-| C4 Rules matching interface | PARTIAL | Main routing works; copilot.scope returns choice although requested yes/no; catalogue consistency untested. |
-| C5 Router/error/shadow/log/health | PARTIAL | Existing routing/logging and health; confidence validation and comprehensive tests required. |
+| C2 Decision YAML catalogue | DONE | All requested points retain names/questions/options/state_fields and now include explicit act/review thresholds; copilot.scope is yes/no. |
+| C3 Jev transport | DONE | Official pinned model, timeout/retries/batching retained; answer types/probabilities/model validated, copies and locked cache protect repeated/concurrent requests. |
+| C4 Rules matching interface | DONE | Each rules answer type matches its catalogue primitive; conservative copilot yes/no fallback tested. |
+| C5 Router/error/shadow/log/health | DONE | Existing both error modes and shadow tests pass; malformed replies log null label/confidence and route to review; health retains configured/provider status. |
 | D1 Snapshot for all active domains | PARTIAL | Snapshot includes forecasts; pipeline builds a separate smaller snapshot and omits forecast decisions. |
 | D2 Triage/level/complexity gates | PARTIAL | Routing exists; Critical low-confidence exception, full snapshot input and dedupe tests need review. |
 | D3 Predictive candidate routing/lead time | MISSING | Risks persist candidates, but pipeline does not classify stored predicted_* candidates. |

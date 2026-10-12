@@ -38,7 +38,7 @@ def decide_many(points: list[str], state: dict[str, Any]) -> dict[str, Any]:
         elif point == "complaint.category":
             result[point] = _choice("other")
         elif point == "copilot.scope":
-            result[point] = _choice("needs_review")
+            result[point] = {"type": "noul", "noul": 0.0}
         else:
             raise KeyError(point)
     return {"answers": result, "model": "rules-v1", "cached": False}
