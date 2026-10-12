@@ -46,6 +46,28 @@ def state_hash(state: dict[str, Any], points: list[str]) -> str:
     return hashlib.sha256(encoded.encode()).hexdigest()
 
 
+def request_state(points: list[str], state: dict[str, Any]) -> dict[str, Any]:
+    """Only send the catalogue's decision fields; retain actual forecast extrema."""
+    fields = {field for point in points for field in catalogue()["decisions"][point]["state_fields"]}
+    def compact(value):
+        if isinstance(value, dict):
+            output = {key: compact(item) for key, item in value.items()}
+            series = value.get("series")
+            if isinstance(series, list) and len(series) > 4:
+                finite = [item for item in series if isinstance(item, dict) and isinstance(item.get("value"), (int, float)) and math.isfinite(item["value"])]
+                chosen = [series[0], series[-1]]
+                if finite:
+                    chosen.extend([min(finite, key=lambda item: item["value"]), max(finite, key=lambda item: item["value"])])
+                output["series"] = sorted({json.dumps(item, sort_keys=True, default=str): item for item in chosen}.values(), key=lambda item: str(item.get("timestamp", "")))
+                output["series_point_count"] = len(series)
+                output["series_selection"] = "observed forecast endpoints and extrema; intermediate points omitted"
+            return output
+        if isinstance(value, list):
+            return [compact(item) for item in value]
+        return value
+    return {key: compact(value) for key, value in state.items() if key in fields}
+
+
 def _decide_many(points: list[str], state: dict[str, Any]) -> dict[str, Any]:
     if not settings.jev_api_key:
         raise RuntimeError("JEV_API_KEY is not configured")
@@ -54,7 +76,7 @@ def _decide_many(points: list[str], state: dict[str, Any]) -> dict[str, Any]:
     key = state_hash(state, points)
     if key in _cache:
         return {**deepcopy(_cache[key]), "cached": True}
-    body = {"model": JEV_MODEL, "state": state, "questions": {point: question(point) for point in points}}
+    body = {"model": JEV_MODEL, "state": request_state(points, state), "questions": {point: question(point) for point in points}}
     endpoint = (settings.jev_base_url or JEV_ENDPOINT).rstrip("/")
     if not endpoint.endswith("/v1/systemone"):
         endpoint += "/v1/systemone"
@@ -63,8 +85,14 @@ def _decide_many(points: list[str], state: dict[str, Any]) -> dict[str, Any]:
         for attempt in range(3):
             try:
                 response = client.post(endpoint, json=body, headers={"Authorization": f"Bearer {settings.jev_api_key}"})
-                if response.status_code in {401, 403, 422}:
-                    raise RuntimeError(f"Jev rejected request: HTTP {response.status_code}")
+                if 400 <= response.status_code < 500 and response.status_code != 429:
+                    try:
+                        details = response.json()
+                        error = details.get("error", details)
+                        message = error.get("message", error.get("detail", error.get("code", ""))) if isinstance(error, dict) else str(error)
+                    except (ValueError, AttributeError):
+                        message = "Provider rejected the request"
+                    raise RuntimeError(f"Jev rejected request: HTTP {response.status_code}: {str(message)[:300]}")
                 response.raise_for_status()
                 payload = response.json()
                 answers = payload["answers"]

@@ -69,6 +69,7 @@ def dashboard_payload(frames: dict[str, pd.DataFrame], alerts: list[dict[str, An
     latest_ops = _latest(frames["operations"])
     latest_weather = _latest(frames["weather"])
     latest_tanks = _latest(frames["water_tanks"])
+    latest_resources = _latest(frames.get("water_resources", pd.DataFrame()))
     latest_mobility = _latest(mobility)
     latest_climate = _latest(climate)
     open_alerts = [a for a in alerts if a["status"] in {"open", "needs_review", "pending_agent"}]
@@ -117,7 +118,9 @@ def dashboard_payload(frames: dict[str, pd.DataFrame], alerts: list[dict[str, An
         "meta": {"generatedAt": context["as_of"].isoformat(), "filters": {"node": context["node"],
                  "start": context["start"].isoformat(), "end": context["end"].isoformat(),
                  "as_of": context["as_of"].isoformat()}},
-        "overview": {"score": score, "delta": 0, "trend": "Stable", "factors": factors,
+        "overview": {"weather": {"temperature": mean(latest_weather, "temperature"), "humidity": mean(latest_weather, "humidity"),
+                                    "rainfallMm": mean(latest_weather, "rainfall"),
+                                    "asOf": str(weather.get("timestamp", "")), "source": str(weather.get("data_source", ""))}, "score": score, "delta": 0, "trend": "Stable", "factors": factors,
                      "complaints": {"open": 0, "overdue": 0},
                      "utilization": {"classrooms": round(_num(operations.get("classroom_utilisation")) * 100),
                                      "labs": round(_num(operations.get("lab_utilisation")) * 100),
@@ -130,7 +133,12 @@ def dashboard_payload(frames: dict[str, pd.DataFrame], alerts: list[dict[str, An
                    "avoidedTco2e": 0, "buildings": series_buildings,
                    "monthlySavingRs": round(sum(a["saving_inr"] for a in actions if a["type"] == "review_energy_spike")),
                    "savingMwh": 0},
-        "water": {"useTodayM3": round(total(latest_water, "water_consumption_litres") / 1000, 2),
+        "water": {"daysOfWaterAvailable": mean(latest_resources, "days_of_water_available"),
+                  "meanLinePressureBar": mean(latest_water, "line_pressure"),
+                  "flowM3PerHour": total(latest_water, "flow_lpm") * 0.06 if mean(latest_water, "flow_lpm") is not None else None,
+                  "waterStress": mean(latest_resources, "water_stress"),
+                  "monitoredTankCapacityKl": total(latest_tanks, "tank_capacity_kl") if mean(latest_tanks, "tank_capacity_kl") is not None else None,
+                  "useTodayM3": round(total(latest_water, "water_consumption_litres") / 1000, 2),
                   "deltaAvg": 0, "dailySupplyM3": 0,
                   "storedReservePercent": round(_num(mean(latest_tanks, "tank_level_pct"))),
                   "intensityLPerPerson": round(total(latest_water, "water_consumption_litres") /
@@ -155,7 +163,7 @@ def dashboard_payload(frames: dict[str, pd.DataFrame], alerts: list[dict[str, An
         "safety": {"openReports": int((safety.get("status", pd.Series(dtype=str)).astype(str).str.lower() != "closed").sum()) if not safety.empty else 0,
                    "highRiskZones": 0, "inspectionsPercent": 0, "anomaliesCount": sum(a["domain"] == "safety" for a in open_alerts),
                    "periodReportedIssues": len(safety)},
-        "climate": {"preparednessIndex": round(_num(mean(latest_climate, "climate_readiness_score"))),
+        "climate": {"heatRisk": mean(latest_climate, "heat_risk"), "floodRisk": mean(latest_climate, "flood_risk"), "preparednessIndex": round(_num(mean(latest_climate, "climate_readiness_score"))),
                     "heatIndexC": round(_num(weather.get("heat_index"))), "coolingLoadMw": 0,
                     "rainAlertMm": round(_num(weather.get("rainfall_6h_total"))), "rainAlertDuration": "6 hr"},
         "sustainability": {"score": score, "grade": "", "ghgEmissionsYearly": 0,
