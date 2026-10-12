@@ -61,6 +61,30 @@ All regular analytics routes accept `node` (default `F01`), `start` (default 202
 - The live `sustainability.energy_score`, `assets_score`, and `safety_score` columns are numeric, while the CSV-based model infers `sustainability_score` and `climate_score` as text. API serialization must parse those scores.
 - `docs/PROGRESS.md` originally labeled Phase 3 as retrieval/applicability and Phase 5 as actions/replay; the active user request defines Phase 3 as frontend connection plus Jev decisions and actions.
 
+## Forecasting Audit and Baseline State (2026-10-12)
+
+Existing forecasts implemented in Phase 2 (`app/analytics/forecast.py`):
+- `energy`: Building-level `energy_kwh` using separate `HistGradientBoostingRegressor` per building if training rows >= 100, else fallback to `seasonal` (`lag_168`). 24-hour hourly horizon only.
+- `water`: Facility-level `water_consumption_litres` (`water_hourly`) using a single `HistGradientBoostingRegressor` or `seasonal`. 24-hour hourly horizon.
+- `parking`: Gate-level `parking_occupancy` (`traffic_parking`) using separate `HistGradientBoostingRegressor` per gate or `seasonal`. 24-hour hourly horizon.
+- Baseline: Evaluated against single baseline `lag_168` on a 7-day test split. No multi-fold rolling origin backtest, no zero-guarded sMAPE, no band coverage validation.
+- Missing tables: `forecast_models`, `forecasts`, `forecast_accuracy`.
+- Missing endpoints: `GET /forecast`, `GET /forecast/accuracy`, `GET /forecast/risks`, multi-metric / multi-horizon `GET /forecast/{domain}`.
+- Missing targets:
+  - Energy: `peak_demand_kw` per building; floor-level forecasts (`building forecast * current floor share`); 7d daily horizon.
+  - Occupancy: `occupancy_count` per building (feeds downstream energy/water/traffic models); 24h hourly and 7d daily.
+  - Water: `water_consumption_litres` per meter (15 meters) + campus sum; tank level simulation (`tank_level_pct` with 40%/85% pump rule) and `days_of_water_available`.
+  - Waste: `waste_weight` per bin (57 bins ML); fill % simulation with 06:00, 12:00, 18:00 pickups; `predicted_overflow_time`; `diversion_rate`.
+  - Traffic: `vehicle_count`, `delay_min` per gate; parking % = occupancy / capacity.
+  - Air: `aqi_cpcb`, `pm25`, `pm10`, `no2` on Campus zone; wind speed and rainfall features; CPCB bands.
+  - Weather: `temperature`, `humidity`, `rainfall`, `wind_speed` via climatology blended with persistence; labeled `data_source = synthetic`.
+  - Climate: `heat_risk` and `flood_risk` per zone from generator formulas on forecast weather.
+  - Emissions: `energy_co2e`, `mobility_co2e`, `waste_co2e`, `total_co2e` per building and daily via emission factors.
+  - Assets: Next-24h failure risk per asset (0-100) via rule score; vibration linear trend forecast for HVAC, pump, chiller.
+  - Safety: Daily incident count per area (7 days) via Poisson loss / baseline; hourly risk index from darkness and rain.
+  - Sustainability: Projected 7-day daily sustainability score using score formulas.
+  - Complaints: `complaints_daily` registered as pending target.
+
 ## Phase 3 additions after this audit
 
 `GET /dashboard` now returns the frontend mapping in `docs/API_CONTRACT.md`; `GET /decisions/queue` returns `{as_of,items,count,data_source}`; `GET /actions` returns `{as_of,actions,data_source}`; and `PATCH /actions/{id}` accepts `{status}` with `X-Role`. The live Neon migration added `alert_key,type,text,saving_inr,saving_co2e,priority,owner,needs_head_approval,source` to `actions`, and `point,state_hash,label,confidence,status,model` to `decision_log`. Existing payload columns and rows were retained.
