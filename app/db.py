@@ -123,12 +123,35 @@ def _add_operational_tables() -> None:
         "weekly_summaries": [Column("summary_id", String(100), primary_key=True), Column("week_start", timestamp), Column("node_id", String(100)), Column("payload", String)],
         "complaints": [Column("complaint_id", String(100), primary_key=True), Column("created_at", timestamp), Column("node_id", String(100)), Column("status", String(40)), Column("payload", String)],
         "knowledge_chunks": [Column("chunk_id", String(100), primary_key=True), Column("sector", String(80)), Column("document_id", String(160)), Column("content", String), Column("metadata_json", String)],
+        "forecast_models": [Column("model_id", String(100), primary_key=True), Column("target", String(80), nullable=False),
+                            Column("trained_at", timestamp, nullable=False), Column("train_end", timestamp, nullable=False),
+                            Column("params", JSON)],
+        "forecasts": [Column("forecast_id", String(160), primary_key=True), Column("target", String(80), nullable=False),
+                      Column("entity", String(80), nullable=False), Column("issued_at", timestamp, nullable=False),
+                      Column("ts", timestamp, nullable=False), Column("yhat", Float, nullable=False),
+                      Column("lo", Float, nullable=False), Column("hi", Float, nullable=False),
+                      Column("method", String(40), nullable=False), Column("served_model", String(80), nullable=False)],
+        "forecast_accuracy": [Column("accuracy_id", String(120), primary_key=True), Column("target", String(80), nullable=False),
+                              Column("fold", Integer, nullable=False), Column("mae", Float, nullable=False),
+                              Column("smape", Float, nullable=False), Column("baseline_mae", Float, nullable=False),
+                              Column("band_coverage", Float, nullable=False)],
     }
     for name, columns in definitions.items():
         if name not in metadata.tables:
             Table(name, metadata, *columns)
     if "ix_alerts_alert_key" not in {index.name for index in metadata.tables["alerts"].indexes}:
         Index("ix_alerts_alert_key", metadata.tables["alerts"].c.alert_key, unique=True)
+    if "forecasts" in metadata.tables and "ix_forecasts_lookup" not in {index.name for index in metadata.tables["forecasts"].indexes}:
+        Index("ix_forecasts_lookup", metadata.tables["forecasts"].c.target, metadata.tables["forecasts"].c.entity, metadata.tables["forecasts"].c.issued_at)
+
+
+def ensure_forecast_tables(bind) -> None:
+    """Ensure forecast operational tables exist idempotently."""
+    get_metadata()
+    for name in ("forecast_models", "forecasts", "forecast_accuracy"):
+        table = metadata.tables.get(name)
+        if table is not None:
+            table.create(bind, checkfirst=True)
 
 
 def get_metadata() -> MetaData:

@@ -1,0 +1,212 @@
+# Registry of operational forecast targets
+# Format:
+# id: target identifier
+# domain: domain grouping (energy, water, waste, mobility, air, weather, climate, emissions, assets, safety, sustainability, complaints)
+# table: source database table
+# entity_key: column identifying the entity (or null for campus-level)
+# metric: target metric column
+# horizons: list of horizons ('24h', '7d')
+# method: ml | simulated | formula | rule | poisson | pending
+# baseline: lag_168 | lag_24 | naive_last
+# drivers: key factors influencing the metric
+
+targets:
+  - id: energy_kwh
+    domain: energy
+    table: energy_building_hourly
+    entity_key: building_id
+    metric: energy_kwh
+    horizons: [24h, 7d]
+    method: ml
+    baseline: lag_168
+    drivers: [occupancy, temperature, humidity, is_holiday]
+
+  - id: peak_demand_kw
+    domain: energy
+    table: energy_building_hourly
+    entity_key: building_id
+    metric: peak_demand_kw
+    horizons: [24h, 7d]
+    method: ml
+    baseline: lag_168
+    drivers: [occupancy, temperature]
+
+  - id: occupancy_count
+    domain: occupancy
+    table: occupancy_hourly
+    entity_key: building_id
+    metric: occupancy_count
+    horizons: [24h, 7d]
+    method: ml
+    baseline: lag_168
+    drivers: [hour, dayofweek, is_holiday]
+
+  - id: water_consumption_litres
+    domain: water
+    table: water_hourly
+    entity_key: meter_id
+    metric: water_consumption_litres
+    horizons: [24h]
+    method: ml
+    baseline: lag_168
+    drivers: [occupancy, temperature, rainfall]
+
+  - id: tank_level_pct
+    domain: water
+    table: water_tank_levels
+    entity_key: tank_id
+    metric: tank_level_pct
+    horizons: [24h]
+    method: simulated
+    baseline: lag_24
+    drivers: [forecast_water_use, pump_rule]
+
+  - id: waste_weight
+    domain: waste
+    table: waste_hourly
+    entity_key: bin_id
+    metric: waste_weight
+    horizons: [24h]
+    method: ml
+    baseline: lag_168
+    drivers: [occupancy, dayofweek]
+
+  - id: bin_fill_pct
+    domain: waste
+    table: waste_hourly
+    entity_key: bin_id
+    metric: fill_percentage
+    horizons: [24h]
+    method: simulated
+    baseline: lag_24
+    drivers: [waste_weight, bin_capacity, pickup_schedule]
+
+  - id: diversion_rate
+    domain: waste
+    table: waste_hourly
+    entity_key: bin_type
+    metric: diversion_rate
+    horizons: [24h]
+    method: formula
+    baseline: lag_24
+    drivers: [waste_weight_recycled, waste_weight_total]
+
+  - id: traffic_vehicle_count
+    domain: mobility
+    table: traffic_parking
+    entity_key: gate_id
+    metric: vehicle_count
+    horizons: [24h]
+    method: ml
+    baseline: lag_168
+    drivers: [occupancy, hour, dayofweek]
+
+  - id: parking_occupancy
+    domain: mobility
+    table: traffic_parking
+    entity_key: gate_id
+    metric: parking_occupancy
+    horizons: [24h]
+    method: ml
+    baseline: lag_168
+    drivers: [occupancy, vehicle_count]
+
+  - id: traffic_delay_min
+    domain: mobility
+    table: traffic_parking
+    entity_key: gate_id
+    metric: delay_min
+    horizons: [24h]
+    method: ml
+    baseline: lag_168
+    drivers: [vehicle_count, rainfall]
+
+  - id: air_quality
+    domain: air
+    table: air_environment
+    entity_key: zone_id
+    metric: aqi_cpcb
+    horizons: [24h]
+    method: ml
+    baseline: lag_24
+    drivers: [wind_speed, rainfall, temperature]
+
+  - id: weather
+    domain: weather
+    table: weather
+    entity_key: facility_id
+    metric: temperature
+    horizons: [24h, 7d]
+    method: formula
+    baseline: lag_24
+    drivers: [climatology_14d, persistence]
+
+  - id: climate_risk
+    domain: climate
+    table: climate_resilience
+    entity_key: zone_id
+    metric: heat_risk
+    horizons: [24h]
+    method: formula
+    baseline: lag_24
+    drivers: [forecast_temperature, forecast_rainfall]
+
+  - id: emissions_co2e
+    domain: emissions
+    table: emissions
+    entity_key: building_id
+    metric: total_co2e
+    horizons: [24h, 7d]
+    method: formula
+    baseline: lag_168
+    drivers: [forecast_energy_kwh, emission_factors]
+
+  - id: asset_failure_risk
+    domain: assets
+    table: assets_equipment
+    entity_key: asset_id
+    metric: failure_risk
+    horizons: [24h]
+    method: rule
+    baseline: naive_last
+    drivers: [vibration, vibration_slope, hours_since_maintenance, load, downtime_hours]
+
+  - id: asset_vibration
+    domain: assets
+    table: assets_equipment
+    entity_key: asset_id
+    metric: vibration
+    horizons: [24h]
+    method: formula
+    baseline: naive_last
+    drivers: [linear_trend]
+
+  - id: safety_incidents
+    domain: safety
+    table: safety_incidents
+    entity_key: area_id
+    metric: incident_count
+    horizons: [7d]
+    method: poisson
+    baseline: lag_168
+    drivers: [darkness, rainfall, historical_rate]
+
+  - id: sustainability_score
+    domain: sustainability
+    table: sustainability
+    entity_key: facility_id
+    metric: sustainability_score
+    horizons: [7d]
+    method: formula
+    baseline: naive_last
+    drivers: [forecast_kpis]
+
+  - id: complaints_daily
+    domain: complaints
+    table: complaints
+    entity_key: facility_id
+    metric: complaints_count
+    horizons: [7d]
+    method: pending
+    baseline: naive_last
+    drivers: [pending]
