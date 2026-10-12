@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { fetchDashboardData } from '../services/api';
 import { api, USE_MOCK } from '../services/client';
+import { snapshotLabel, snapshotAsOf, istDate } from '../services/dates';
 
 const DashboardContext = createContext();
 
@@ -63,22 +64,15 @@ export const DEFAULT_FILTERS = {
   role: 'Administrator',
   location: 'Main Campus',
   period: 'This week',
-  snapshotDate: 'Fri 9 Oct 2026',
+  snapshotDate: snapshotLabel(),
 };
 
 export const FILTER_OPTIONS = {
   sectors: ['College', 'Engineering Institute', 'Medical Center', 'Business School', 'Arts & Media'],
   roles: ['Administrator', 'Department Head', 'Staff'],
   locations: ['Main Campus', 'North Research Park', 'South Residential Zone', 'East Innovation Hub'],
-  periods: ['This week', 'Last week', 'This month', 'Last month', 'This quarter', 'Year to date (2026)'],
-  snapshotDates: [
-    'Fri 9 Oct 2026',
-    'Thu 8 Oct 2026',
-    'Wed 7 Oct 2026',
-    'Mon 5 Oct 2026',
-    'Fri 2 Oct 2026',
-    'Sat 26 Sep 2026'
-  ]
+  periods: ['This week', 'Last week', 'This month', 'Last month', 'This quarter', `Year to date (${istDate().slice(0, 4)})`],
+  snapshotDates: Array.from({ length: 7 }, (_, index) => snapshotLabel(-index))
 };
 
 export function DashboardProvider({ children }) {
@@ -93,7 +87,20 @@ export function DashboardProvider({ children }) {
     : selectedWorld === 'hospital' ? 'Hospital Network' : 'Campus A';
 
   const [currentPage, setCurrentPage] = useState('overview');
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState(() => ({ ...DEFAULT_FILTERS, snapshotDate: snapshotLabel() }));
+  const [clockNow, setClockNow] = useState(() => new Date());
+  const todayLabel = useRef(snapshotLabel());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const current = new Date();
+      const label = snapshotLabel(0, current);
+      const previous = todayLabel.current;
+      todayLabel.current = label;
+      if (label !== previous) setFilters(value => value.snapshotDate === previous ? { ...value, snapshotDate: label } : value);
+      setClockNow(current);
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
   const [dashboardData, setDashboardData] = useState(null);
   const [locations, setLocations] = useState([]);
   const [replayState, setReplayState] = useState(null);
@@ -164,8 +171,7 @@ export function DashboardProvider({ children }) {
   }, []);
 
   const node = locations.find(item => item.label === filters.location)?.node_id || 'F01';
-  const selectedDay = new Date(`${filters.snapshotDate.replace(/^[A-Za-z]{3} /, '')} 23:00:00 GMT+0530`);
-  const selectedAsOf = Number.isNaN(selectedDay.getTime()) ? '2026-10-09T23:00:00+05:30' : selectedDay.toISOString();
+  const selectedAsOf = snapshotAsOf(filters.snapshotDate, clockNow);
   const effectiveAsOf = replayState?.running ? replayState.cursor : selectedAsOf;
   const alertToNotification = (alert) => ({
     id: alert.alert_key, type: (alert.level || 'Info').toLowerCase(),
@@ -300,6 +306,7 @@ export function DashboardProvider({ children }) {
   const resetFilters = () => {
     setFilters({
       ...DEFAULT_FILTERS,
+      snapshotDate: snapshotLabel(),
       role: currentUser?.role || 'Administrator',
       location: currentUser?.assignedLocations?.[0] || 'Main Campus'
     });
@@ -373,7 +380,7 @@ export function DashboardProvider({ children }) {
         setShareModalOpen,
         datePickerOpen,
         setDatePickerOpen,
-        FILTER_OPTIONS,
+        FILTER_OPTIONS: { ...FILTER_OPTIONS, snapshotDates: Array.from({ length: 7 }, (_, index) => snapshotLabel(-index, clockNow)) },
         PRESET_USERS
       }}
     >

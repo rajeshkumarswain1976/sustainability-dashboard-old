@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { api, USE_MOCK } from '../services/client';
+import { istDate, snapshotAsOf } from '../services/dates';
 import { 
   Search, 
   X, 
@@ -320,7 +321,7 @@ export default function GlobalModals() {
               <label className="text-[10px] uppercase font-bold text-dark-400 block mb-1.5">Custom Date Picker:</label>
               <input
                 type="date"
-                defaultValue="2026-10-09"
+                defaultValue={istDate()}
                 onChange={(e) => {
                   if (e.target.value) {
                     updateFilter('snapshotDate', e.target.value);
@@ -337,7 +338,7 @@ export default function GlobalModals() {
                   <button className="px-3 py-2 rounded-lg bg-brand-orange text-white text-xs" onClick={async () => {
                     try {
                       const node = locations.find(item => item.label === filters.location)?.node_id || 'F01';
-                      setReplayState(await api.replayStart({ node, as_of: replayState?.cursor }));
+                      setReplayState(await api.replayStart({ node, as_of: replayState?.running ? replayState.cursor : snapshotAsOf(filters.snapshotDate) }));
                     } catch (error) { showToast(error.message); }
                   }}>Start</button>
                   <button className="px-3 py-2 rounded-lg bg-[#252835] text-white text-xs" onClick={async () => {

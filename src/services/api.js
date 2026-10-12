@@ -7,6 +7,7 @@
  */
 
 import { api, API_BASE_URL, USE_MOCK } from './client';
+import { snapshotAsOf, periodWindow } from './dates';
 
 export { API_BASE_URL };
 export const USE_MOCK_DATA = USE_MOCK;
@@ -37,26 +38,9 @@ const getMultipliers = (filters) => {
 export const fetchDashboardData = async (filters) => {
   if (!USE_MOCK_DATA) {
     const node = filters.node || 'F01';
-    const day = filters.snapshotDate ? new Date(`${filters.snapshotDate.replace(/^[A-Za-z]{3} /, '')} 23:00:00 GMT+0530`) : new Date('2026-10-09T23:00:00+05:30');
-    const asOf = filters.as_of || (Number.isNaN(day.getTime()) ? '2026-10-09T23:00:00+05:30' : day.toISOString());
-    const cutoff = new Date(asOf);
-    const dayMs = 86400000;
-    let start = new Date(cutoff.getTime() - 7 * dayMs);
-    let end = cutoff;
-    if (filters.period === 'Last week') {
-      start = new Date(cutoff.getTime() - 14 * dayMs);
-      end = new Date(cutoff.getTime() - 7 * dayMs);
-    } else if (filters.period === 'This month') {
-      start = new Date(Date.UTC(cutoff.getUTCFullYear(), cutoff.getUTCMonth(), 1));
-    } else if (filters.period === 'Last month') {
-      start = new Date(Date.UTC(cutoff.getUTCFullYear(), cutoff.getUTCMonth() - 1, 1));
-      end = new Date(Date.UTC(cutoff.getUTCFullYear(), cutoff.getUTCMonth(), 1) - 1);
-    } else if (filters.period === 'This quarter') {
-      start = new Date(Date.UTC(cutoff.getUTCFullYear(), Math.floor(cutoff.getUTCMonth() / 3) * 3, 1));
-    } else if (filters.period === 'Year to date (2026)') {
-      start = new Date('2026-01-01T00:00:00+05:30');
-    }
-    return api.dashboard({ node, start: start.toISOString(), end: end.toISOString(), as_of: asOf });
+    const asOf = filters.as_of || snapshotAsOf(filters.snapshotDate || '');
+    const window = periodWindow(asOf, filters.period || 'This week');
+    return api.dashboard({ node, start: window.start, end: window.end, as_of: asOf });
   }
 
   // Realistic mock data engine that adapts smoothly to all filters

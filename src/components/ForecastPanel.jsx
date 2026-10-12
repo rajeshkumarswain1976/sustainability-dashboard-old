@@ -64,7 +64,7 @@ export default function ForecastPanel({ domain, title, defaultMetric, compact = 
   const selected = forecasts.find(item => item.entity_id === entity) || forecasts[0];
   const series = selected?.series || [];
   const unit = options.find(item => item[0] === metric)?.[2] || '';
-  const method = selected?.model === 'hist_gradient_boosting' ? 'ML' : selected?.model;
+  const method = selected?.model === 'hist_gradient_boosting' ? 'ML' : selected?.model === 'weather_api' ? 'API' : selected?.model;
   const synthetic = state.data?.data_source?.classification?.includes('synthetic');
   const min = Math.min(...series.map(point => point.lower));
   const max = Math.max(...series.map(point => point.upper));
@@ -92,6 +92,7 @@ export default function ForecastPanel({ domain, title, defaultMetric, compact = 
       <div className="flex flex-wrap gap-2 items-center text-[11px] text-dark-300">
         <span>{selected.entity_id}</span><span className="rounded bg-brand-orange/15 text-brand-orange px-2 py-0.5">{method}</span>
         {synthetic && <span className="rounded bg-amber-500/15 text-amber-300 px-2 py-0.5">synthetic</span>}
+        {state.data?.data_source?.provider === 'open-meteo' && <a href="https://open-meteo.com/" target="_blank" rel="noreferrer" className="underline">Delhi · Open-Meteo</a>}
         {state.data?.projection && <span>projection · holds latest observed score</span>}
         <span>{unit}</span>
       </div>

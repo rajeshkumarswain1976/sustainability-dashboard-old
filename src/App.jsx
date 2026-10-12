@@ -53,7 +53,7 @@ function RestrictedAccessBanner({ pageName }) {
 }
 
 function DashboardContent() {
-  const { currentPage, setCurrentPage, setSearchModalOpen, isLoading, canAccessPage } = useDashboard();
+  const { currentPage, setCurrentPage, setSearchModalOpen, isLoading, canAccessPage, locations } = useDashboard();
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -145,7 +145,7 @@ function DashboardContent() {
 
           <div className="hidden xl:flex items-center gap-2 text-[11px] font-mono text-dark-400 shrink-0">
             <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-amber-400 animate-spin' : 'bg-emerald-400 animate-pulse'}`} />
-            <span>{isLoading ? 'Recalculating telemetry...' : 'Backend sync: Live (1.4k nodes)'}</span>
+            <span>{isLoading ? 'Loading dataset...' : `Dataset replay · ${locations.length} locations`}</span>
           </div>
         </div>
 
