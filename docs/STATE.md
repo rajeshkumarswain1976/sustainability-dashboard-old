@@ -1,3 +1,17 @@
+# Current-date replay and Delhi weather (2026-10-12)
+
+The user requested automatic current-date replay, operational forecasts from the dataset, and weather forecasts from an API for Delhi. This supersedes the fixed 9 October default and the requirement to anticipate that particular historical storm/pickup event in the current view.
+
+- `REPLAY_ALIGN_TODAY=true` maps the dataset's final calendar day to the current IST date, and translates all source query bounds and returned date/time columns by the same offset. Original CSVs and stored source readings remain intact. On 12 October, the displayed range is 20 August?12 October; tomorrow it advances automatically. Query filtering happens in the source calendar before timestamps are mapped, so unreplayed hours remain excluded.
+- API replay state and stream bounds follow the calendar without changing protected engine/decision/action implementations. Dataset closure dates follow the same mapping. Model cache keys and persisted accuracy include the offset, preventing an older calendar's model from being reused after midnight.
+- The frontend defaults to today/current time, updates its clock every minute, advances its default date across midnight, generates recent date choices dynamically, and computes month/year boundaries in IST. Manual historical date selections remain available. Real mode uses neutral `Dataset replay` wording rather than a fabricated live-node count.
+- Delhi's coordinates were resolved through Open-Meteo (28.65195, 77.23149). The weather widget uses its forecast API for temperature, humidity, rainfall and wind in m/s, with 24 hourly or seven complete daily points, a 15-minute cache, five-second timeout and provider attribution. Actual retrieval/issue time is returned separately from the dataset cutoff. Past replay times cannot use a forecast fetched later; they retain the dataset fallback. Operational ML/climate/safety inputs remain dataset-based, as requested.
+- The four non-secret settings were configured in the local ignored `.env` and documented in `.env.example`. Existing credentials were preserved.
+
+Validation: 68 backend tests passed, plus three Node date tests; production build passes. Live public Delhi forecast retrieval succeeded. Local HTTP smoke: `/forecast/weather` returned HTTP 200 with `weather_api` and 24 hourly / seven daily points; `/energy` returned HTTP 200 with today's timestamps and no unreplayed future hours. No production source-table rewrites or protected action/decision table migrations were performed.
+
+Restart the API/frontend when running without automatic reload so the updated environment and source modules are loaded. The earlier audit and full-phase limitations remain below as historical context.
+
 # Forecasting repair audit (2026-10-12)
 
 The interrupted work was preserved in commit `c65caa3` (`wip: interrupted phase 3`). The repair does not change decision, engine, agent, action, decision-log, or complaint implementations. The existing snapshot change was preserved in that safety commit.

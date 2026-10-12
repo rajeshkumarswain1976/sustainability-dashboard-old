@@ -73,3 +73,14 @@ Pydantic and client types permit extra domain fields, while validating the share
 The earlier Phase 3 mapping remains valid for current KPIs. Its older three-domain forecast description is superseded by this section. Full forecasting acceptance gaps and measured results are recorded in STATE.md.
 
 Saved forecast/model IDs include the horizon to keep an hourly midnight value separate from a daily total. Accuracy reports measured hourly ML target evaluations; unevaluated daily baselines do not overwrite them. Refreshes replace only matching forecast IDs and preserve points for other scopes.
+
+
+## Automatic current-date replay / weather API
+
+`REPLAY_ALIGN_TODAY=true` enables a moving dataset calendar. Source timestamps are translated uniformly so the final dataset day is today's IST date; date filters are translated back before querying. `GET /replay/calendar` returns `{today,timezone,aligned_to_today,offset_days,start,end,as_of}`. Default analytics windows use these bounds, and replay state includes `calendar_offset_days` so midnight rollover preserves the source position. Explicit historical selections query the mapped calendar, not an altered original CSV.
+
+`WEATHER_FORECAST_ENABLED=true`, `WEATHER_LATITUDE=28.65195`, `WEATHER_LONGITUDE=77.23149` configure Delhi/Open-Meteo. For a current or future replay cutoff with API coverage, `/forecast/weather` returns `model=weather_api`, `data_source={mode:weather_forecast,classification:api_weather_forecast,provider:open-meteo,location:Delhi}`. `as_of` is the actual API retrieval/issuance time and `data_cutoff` is the requested dataset cutoff. Seven-day responses contain seven complete future days; rainfall sums hourly amounts while temperature/humidity/wind use daily means. Wind is requested in m/s. The cached API response is never used for a replay before its retrieval window; historical or unavailable coverage falls back to the dataset with the existing synthetic classification. API timestamps and source status are not labelled as measured campus data.
+
+Operational forecasts continue using dataset-only inputs. Current-date defaults use the current hour/time rather than a future 23:00 snapshot, and calendar month/year boundaries use IST. Existing source rows, operational action/decision/complaint tables and protected engine logic are unchanged.
+
+Provider contract: https://open-meteo.com/en/docs . Attribution appears beside the weather forecast.

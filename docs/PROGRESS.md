@@ -42,3 +42,22 @@ For local Windows development when Neon connectivity is unavailable, run `.venv\
 - [ ] Full forecasting acceptance: daily KPI-based sustainability projections, independently evaluated daily/derived bands, both story-event predictions and browser verification remain open; see STATE.md.
 
 Validation: 63 backend tests passed; the new all-target HTTP/persistence contract test also passed separately after replacing the earlier source-wiring check. Production build passes. Lint exits successfully with existing warnings. Local measurements: full forecast refresh 29.82s; cached risk calculation 0.21s. No external Jev/Groq requests or production database migrations were made by this repair.
+
+
+## Current-date replay and Delhi weather (2026-10-12)
+
+- [x] Dynamically align the dataset calendar with today's IST date without changing measured values or source files.
+- [x] Dynamic replay state, API window/stream limits, default snapshot/date choices and midnight rollover.
+- [x] Dataset-only operational forecasts; Delhi weather forecast API with cache, source badge and attribution.
+- [x] Configure local environment and document safe example settings.
+
+| Check | Result |
+| --- | --- |
+| Backend regression suite | PASS ? 68 tests |
+| Frontend date/time rollover tests | PASS ? 3 tests |
+| Production build | PASS |
+| Public Delhi weather API | PASS ? 24 matching future hours |
+| Weather endpoint HTTP smoke | PASS ? 24 hourly and 7 daily API points |
+| Current-date dataset HTTP smoke | PASS ? today's mapped dates, future hours excluded |
+
+Fixed historical replay fixtures run with current-date alignment/API HTTP disabled; dedicated tests verify the enabled modes. Protected engine, decision, action and complaint implementations remain unchanged.

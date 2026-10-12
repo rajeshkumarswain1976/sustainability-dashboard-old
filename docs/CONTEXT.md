@@ -45,3 +45,6 @@ payload tables. Phase 3 added Jev routing and additive action/decision columns, 
 React/Vite app in this repository (`src/`); demo data is now behind `VITE_USE_MOCK=true`. `docs/STATE.md` records the pre-change audit.
 The active Phase 3 request covers frontend connection, Jev decisions, and actions; it supersedes the older phase labels in PROGRESS.md.
 Work only on the current phase. Finish each phase by running its tests and printing a pass/fail table.
+
+
+CURRENT-DATE REPLAY (2026-10-12): REPLAY_ALIGN_TODAY=true moves the final dataset day to today's IST date at query time, preserving the source files and values. API/date-picker/replay bounds roll forward automatically. Historical reference tests keep the original calendar. Operational forecasts use only dataset inputs; the weather widget uses Delhi Open-Meteo forecasts (WEATHER_FORECAST_ENABLED, WEATHER_LATITUDE, WEATHER_LONGITUDE), with an explicit dataset fallback for past issue times or API failure. Protected engine/decision/action code is unchanged. See API_CONTRACT.md for moving calendar and issuance metadata.
