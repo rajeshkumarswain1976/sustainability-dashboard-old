@@ -62,7 +62,7 @@ def create_action(session: Session, candidate: dict[str, Any], alert_key: str, l
     needs_review = bool(owner_decision.get("flag") == "needs_review" or priority_decision.get("flag") == "needs_review"
                         or router.probability(owner_decision) < float(gates["act"])
                         or router.probability(priority_decision) < float(gates["act"]))
-    approval = level == "Critical" or (priority is not None and priority >= 80)
+    approval = needs_review or level == "Critical" or (priority is not None and priority >= 80)
     action = {"id": action_id, "alert_key": alert_key, "type": action_type, "node": candidate["node"],
               "text": action_type.replace("_", " ").capitalize() + " at " + candidate["node"],
               "saving_inr": saving_inr, "saving_co2e": saving_co2e, "priority": priority,
@@ -74,7 +74,7 @@ def create_action(session: Session, candidate: dict[str, Any], alert_key: str, l
         session.execute(update(table).where(table.c.action_id == existing["action_id"]).values(
             type=action_type, text=action["text"], saving_inr=saving_inr, saving_co2e=saving_co2e,
             priority=priority, owner=owner, needs_head_approval=int(approval or existing["needs_head_approval"]),
-            payload=json.dumps({"needs_review": needs_review}),
+            payload=json.dumps({**json.loads(existing.get("payload") or "{}"), "needs_review": needs_review}),
         ))
         updated = session.execute(select(table).where(table.c.action_id == existing["action_id"])).mappings().one()
         return _map_row(dict(updated))
@@ -93,8 +93,11 @@ def _map_row(row: dict[str, Any]) -> dict[str, Any]:
             "node": row["node_id"], "text": row["text"], "saving_inr": row["saving_inr"] or 0.0,
             "saving_co2e": row["saving_co2e"] or 0.0, "priority": row["priority"],
             "owner": row["owner"], "status": row["status"],
-            "needs_head_approval": bool(row["needs_head_approval"]), "source": row["source"],
+            "needs_head_approval": bool(row["needs_head_approval"] or payload.get("needs_review")), "source": row["source"],
             "needs_review": bool(payload.get("needs_review")),
+            "estimate_available": payload.get("estimate_available", True),
+            "history": payload.get("history", []),
+            "explanation": payload.get("explanation") or payload.get("agent"),
             "created_at": row["created_at"].isoformat() if row["created_at"] else None}
 
 
@@ -118,9 +121,12 @@ def change_status(session: Session, action_id: str, status: str, role: str) -> d
         raise HTTPException(status_code=422, detail="Unknown action status")
     if STATUS_ORDER.index(status) != STATUS_ORDER.index(row["status"]) + 1:
         raise HTTPException(status_code=409, detail="Action status must advance one step")
-    if status == "done" and row["needs_head_approval"] and role != "head":
+    if status == "done" and (row["needs_head_approval"] or json.loads(row.get("payload") or "{}").get("needs_review")) and role != "head":
         raise HTTPException(status_code=403, detail="Head approval is required")
-    session.execute(update(table).where(table.c.action_id == action_id).values(status=status))
+    payload = json.loads(row.get("payload") or "{}")
+    from app.replay_calendar import now_ist
+    payload["history"] = [*payload.get("history", []), {"from": row["status"], "to": status, "role": role, "at": now_ist().isoformat()}]
+    session.execute(update(table).where(table.c.action_id == action_id).values(status=status, payload=json.dumps(payload)))
     session.commit()
     updated = session.execute(select(table).where(table.c.action_id == action_id)).mappings().one()
     return _map_row(dict(updated))

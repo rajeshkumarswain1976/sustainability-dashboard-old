@@ -19,6 +19,14 @@ from app.engine.scopes import entity_nodes
 from app.engine.replay import load_state, save_state
 
 ANALYZERS = (energy, water, waste, air, traffic, assets, safety, climate)
+_post_decision_hook = None
+
+
+def set_post_decision_hook(hook):
+    """Optional post-routing extension used by the complete TerraNexus service."""
+    global _post_decision_hook
+    _post_decision_hook = hook
+
 
 
 def _store_candidate(session: Session, candidate: dict[str, Any]) -> dict[str, Any] | None:
@@ -101,8 +109,18 @@ def _decide_candidate(session: Session, candidate: dict[str, Any], alert: dict[s
     session.execute(update(get_table("alerts")).where(get_table("alerts").c.alert_key == alert["alert_key"])
                     .values(level=level, status=status, confidence=confidence, facts=facts))
     lead = facts.get("observations", {}).get("lead_time_hours")
-    return {**alert, "level": level, "status": status, "confidence": confidence, "facts": facts,
-            "lead_time_hours": lead}
+    decided = {**alert, "level": level, "status": status, "confidence": confidence, "facts": facts,
+               "lead_time_hours": lead}
+    if _post_decision_hook is not None and status != "ignored":
+        try:
+            with session.begin_nested():
+                return _post_decision_hook(session, candidate, decided, as_of, snapshot)
+        except Exception as error:
+            facts = {**facts, "enrichment_error": type(error).__name__}
+            session.execute(update(get_table("alerts")).where(get_table("alerts").c.alert_key == alert["alert_key"])
+                            .values(status="needs_review", facts=facts))
+            return {**decided, "status": "needs_review", "facts": facts}
+    return decided
 
 
 def tick(as_of: datetime, node: str = "F01", session: Session | None = None) -> dict[str, Any]:
