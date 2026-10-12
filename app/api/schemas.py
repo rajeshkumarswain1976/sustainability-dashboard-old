@@ -102,9 +102,11 @@ def dashboard_payload(frames: dict[str, pd.DataFrame], alerts: list[dict[str, An
                        ("Safety", "safety_score", "safety"), ("Climate", "climate_score", "climate")]
     factors = []
     for name, column, page in component_names:
-        value = _num(mean(score_frame, column))
-        factors.append({"name": name, "score": round(value), "status": "On track" if value >= 80 else "Monitor",
-                        "color": "emerald" if value >= 80 else "amber", "page": page})
+        value = mean(score_frame, column)
+        factors.append({"name": name, "score": value,
+                        "status": "No score available" if value is None else "On track" if value >= 80 else "Monitor",
+                        "color": "muted" if value is None else "emerald" if value >= 80 else "amber", "page": page,
+                        "source": "dataset", "source_column": column})
     occupied = total(latest_mobility, "parking_occupancy")
     capacity = total(latest_mobility, "parking_capacity")
     energy_kwh = total(energy, "energy_kwh")
