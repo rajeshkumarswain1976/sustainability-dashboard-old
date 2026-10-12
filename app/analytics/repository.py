@@ -31,7 +31,23 @@ def _location_records(session: Session) -> list[dict[str, Any]]:
     table = get_table("location_dim")
     if table is None:
         return []
-    return [dict(row) for row in session.execute(select(table)).mappings().all()]
+    records = [dict(row) for row in session.execute(select(table)).mappings().all()]
+    # Stable API identities disambiguate a zone and building with the same raw key.
+    counts = {}
+    for row in records:
+        key = str(row.get("node_id"))
+        counts[key] = counts.get(key, 0) + 1
+    originals = {(str(row.get("level")), str(row.get("node_id"))): row for row in records}
+    identities = {key: (f"{key[0]}:{key[1]}" if counts[key[1]] > 1 and key[0] != "zone" else key[1])
+                  for key in originals}
+    for row in records:
+        level, original = str(row.get("level")), str(row.get("node_id"))
+        row["node_id"] = identities[(level, original)]
+        parent_level = {"floor": "building", "building": "zone", "area": "zone", "zone": "facility"}.get(level)
+        parent = row.get("parent_id")
+        if parent_level and parent is not None:
+            row["parent_id"] = identities.get((parent_level, str(parent)), parent)
+    return records
 
 
 def resolve_scope(session: Session, node: str) -> tuple[dict[str, set[str]], dict[str, Any]]:
@@ -94,6 +110,14 @@ def fetch_frame(
     upper = min(_ist(end), _ist(as_of)) - calendar_offset
     statement = select(table)
     level = str(target.get("level") or "facility").lower()
+    # No fabricated floor readings from a building-only source. Environmental
+    # layers remain shared; building-energy history supports floor allocation.
+    if level == "floor" and "floor_id" not in table.c and table_name not in {
+        "air_environment", "weather", "water_resources", "campus_operations",
+        "energy_building_hourly", "registry_buildings", "registry_assets", "registry_tanks",
+        "registry_meters", "registry_outdoor_areas", "registry_zones_climate", "registry_emission_factors",
+    }:
+        return pd.DataFrame()
     # The location-level environmental layers apply to every child node.
     if table_name in {"air_environment", "weather", "water_resources", "campus_operations"}:
         preferred = ("facility_id",)

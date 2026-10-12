@@ -1,3 +1,11 @@
+RESUMED WORKSPACE (2026-10-12): The active React frontend is C:/Users/HP/Desktop/sustainability-dashboard/src/.
+The backend, source tables, tests and original Git history are in ../sustainability-dashboard-old/.
+Start the existing backend through scripts/start-backend.ps1; it adds read-only /history/{domain}
+for the combined charts and uses the existing local SQLite database. Neon remains configured in
+the backend environment and was audited read-only. Keep the new welcome/mind-tree design.
+PHASE3_STATUS.md supersedes older coverage claims. Initial tests pass, but active frontend
+replay/SSE/action/tree controls and predictive decision-pipeline integration still need completion.
+
 FLOW: Source data -> Adapters -> Clean/Validate -> Normalise -> Common Backbone -> Sector Config -> Domain Analytics ->
 Facility Intelligence Engine -> Router -> Rule Path OR Agentic Path (RAG, Applicability, Simulation, Compare, Explain) -> Action.
 Historical data is replayed as a sensor-style stream ("Real-Time Historical Data Replay", never "live IoT"). No manual value entry.

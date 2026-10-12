@@ -1,6 +1,33 @@
 # Frontend ↔ API contract (Phase 3)
 
-Frontend source is `src/` in this repository. `src/services/api.js` holds the legacy demo object and is used only when `VITE_USE_MOCK=true`. `src/services/client.ts` is the typed HTTP/SSE client. The default base URL is `http://localhost:8000`; override it with `VITE_API_BASE_URL`. All numeric values are JSON numbers, dates are ISO 8601 strings, and arrays are empty when there is no data. The backend mapping lives in `app/api/schemas.py` and does not change source-domain tables.
+Active frontend: `C:/Users/HP/Desktop/sustainability-dashboard/src/`; backend: sibling
+`sustainability-dashboard-old`. `src/services/api.js` retains sample data behind `VITE_USE_MOCK=true`
+(default false). `src/services/client.ts` is the only typed HTTP/SSE client. Its default base is `/api`,
+proxied to localhost:8000 by Vite; production can override `VITE_API_BASE_URL`.
+All values retain the existing widget fields and units below. No source tables are changed for UI labels.
+
+The location tree stores `filters.node` as node_id; display labels are never sent as node.
+The period supplies IST start/end; snapshot date supplies as_of; active replay uses its cursor.
+All 42 nodes are uniquely selectable. The colliding Academic building is `building:Academic`,
+while the Academic zone retains `Academic`; floor parent IDs follow that building identity.
+
+Replay controls use the existing JSON bodies. `/stream?node=` provides SSE tick updates; after a
+connection loss `/alerts?node=&since=&as_of=` catches up and deduplicates alert_key before reconnecting.
+Only open/needs_review/pending_agent rows appear in the bell. The shared header reads score and
+open/critical/needsReview counts from the same overview fields used by every page.
+
+`GET /history/{domain}?node=&metric=&horizon=24h|7d&as_of=` is the read-only chart extension in
+scripts/dashboard_backend.py. Shape: `{domain:string,metric:string,as_of:string,history:[{entity_id:string,
+series:[{timestamp:string,value:number}]}]}`. The chart pairs this with `/forecast/{domain}` using the same
+entity, metric and units: solid historical readings, today marker, dotted future forecast. No future
+source rows are exposed; quantities sum, proportions/risks average, peak demand maximizes. Floor energy
+uses floor source readings and the existing floor forecast allocation; unsupported water floors display
+`No data at this level`. Weather remains dataset history plus Delhi/Open-Meteo future forecasts.
+
+Predictive lead time is read from `facts.observations.lead_time_hours`; alerts may additionally expose
+`lead_time_hours:number|null`. Notifications display confidence, needs-review and `expected in 6h`.
+The existing page/widget table below defines exact empty values and fields pending Phase 4.
+
 
 ## Shared controls and envelopes
 

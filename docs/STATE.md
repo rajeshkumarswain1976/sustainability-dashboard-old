@@ -1,3 +1,23 @@
+# Resumed Phase 3 — active setup (2026-10-12)
+
+The running frontend is now `C:/Users/HP/Desktop/sustainability-dashboard/src/`; the backend,
+source data and original Git history are in the sibling `sustainability-dashboard-old` directory.
+The active `scripts/start-backend.ps1` uses the existing local SQLite dataset database and the
+read-only history extension in `scripts/dashboard_backend.py`. Both localhost and 127.0.0.1
+now resolve to the same updated Vite server. The duplicate old server was stopped.
+
+Initial resumed audit: 68 backend tests pass; frontend production build and HTTP smoke pass.
+Neon information_schema was inspected read-only and has 63 columns across the audited
+operational/forecast tables. Local alerts contains level, confidence, facts, severity and payload;
+needs_review is represented by alert status and action payload, not an invented sensor column.
+Actions, decision_log and complaints stubs already exist. No table was dropped or recreated.
+
+The earlier claims that the active UI has replay/SSE/actions integration are stale after the
+frontend folder split. The current analytics cards and combined trend charts are connected;
+the location selector remains flat and the Actions/Decision queue remains illustrative.
+See PHASE3_STATUS.md for the ordered completion plan and verified item status. The older
+audit sections below are historical records, not claims about the current implementation.
+
 # Current-date replay and Delhi weather (2026-10-12)
 
 The user requested automatic current-date replay, operational forecasts from the dataset, and weather forecasts from an API for Delhi. This supersedes the fixed 9 October default and the requirement to anticipate that particular historical storm/pickup event in the current view.
