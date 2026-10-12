@@ -1,3 +1,17 @@
+# Resumed Phase 3 implementation checkpoint
+
+The active frontend now connects the searchable 42-node tree, replay controls, SSE/reconnect,
+alerts/decision queue, shared score/counts and action progression to the existing backend. The
+new welcome design is preserved. Sidebar badges now use the same mapped values as the header.
+Comparisons, policy and simulations are visibly pending Phase 4 instead of fabricated results.
+
+The pipeline now uses the complete snapshot and routes stored predictive candidates. Real
+occurrences reconcile with predictions within ?1 hour, preserve alert identity/history and
+update one work order while retaining progress. Assignment uncertainty marks review. Jev
+responses are validated against the official pinned-model contract; rules emit matching types.
+No forecasting implementation was rewritten. Existing full-forecast acceptance gaps remain
+outside this Phase 3 scope. Tests and final live-check results are in PHASE3_STATUS.md.
+
 # Resumed Phase 3 — active setup (2026-10-12)
 
 The running frontend is now `C:/Users/HP/Desktop/sustainability-dashboard/src/`; the backend,

@@ -10,6 +10,7 @@ from sqlalchemy import insert, select, update
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.engine.scopes import entity_nodes
 from app.db import get_table
 from app.decision import jev, router
 from app.sector.config import load_sector_config
@@ -29,7 +30,10 @@ def _savings(candidate: dict[str, Any]) -> tuple[float, float]:
     facts = candidate.get("facts") or {}
     if candidate["type"] == "energy_spike":
         excess = max(0.0, float(facts.get("energy_kwh") or 0) - float(facts.get("hour_of_week_median_kwh") or 0))
-        return excess * settings.tariff_inr_per_kwh, excess * settings.grid_ef
+        energy = max(0.0, float(facts.get("energy_kwh") or 0))
+        grid = max(0.0, float(facts.get("grid_import_kwh") or 0))
+        grid_share = min(1.0, grid / energy) if energy else 0.0
+        return excess * settings.tariff_inr_per_kwh, excess * grid_share * settings.grid_ef
     if candidate["type"] == "water_leak" and facts.get("flow_lpm") is not None:
         litres = max(0.0, float(facts["flow_lpm"])) * 60
         return (litres / 1000) * settings.water_tariff_inr_per_kl, 0.0
@@ -64,6 +68,16 @@ def create_action(session: Session, candidate: dict[str, Any], alert_key: str, l
               "saving_inr": saving_inr, "saving_co2e": saving_co2e, "priority": priority,
               "owner": owner, "status": "open", "needs_head_approval": approval, "source": "rule",
               "needs_review": needs_review, "created_at": as_of.isoformat()}
+    existing = session.execute(select(table).where(table.c.alert_key == alert_key)).mappings().first()
+    if existing is not None:
+        # A realized prediction updates the same work order and preserves progress.
+        session.execute(update(table).where(table.c.action_id == existing["action_id"]).values(
+            type=action_type, text=action["text"], saving_inr=saving_inr, saving_co2e=saving_co2e,
+            priority=priority, owner=owner, needs_head_approval=int(approval or existing["needs_head_approval"]),
+            payload=json.dumps({"needs_review": needs_review}),
+        ))
+        updated = session.execute(select(table).where(table.c.action_id == existing["action_id"])).mappings().one()
+        return _map_row(dict(updated))
     session.execute(insert(table).values(
         action_id=action_id, alert_key=alert_key, created_at=as_of, node_id=action["node"],
         type=action_type, text=action["text"], saving_inr=saving_inr, saving_co2e=saving_co2e,
@@ -90,7 +104,7 @@ def list_actions(session: Session, as_of: datetime | None = None, node: str | No
     if as_of is not None:
         stmt = stmt.where(table.c.created_at <= as_of)
     if node and node != "F01":
-        stmt = stmt.where(table.c.node_id == node)
+        stmt = stmt.where(table.c.node_id.in_(entity_nodes(session, node, as_of)))
     stmt = stmt.order_by(table.c.priority.desc().nullslast(), table.c.created_at)
     return [_map_row(dict(row)) for row in session.execute(stmt).mappings()]
 

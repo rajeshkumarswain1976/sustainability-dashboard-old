@@ -191,6 +191,11 @@ def create_db_engine(url_value: str, *, pool_size: int = 5) -> Engine:
     }
     if url.drivername.startswith("postgresql"):
         kwargs["connect_args"] = {"connect_timeout": 10}
+    elif url.drivername.startswith("sqlite"):
+        # Local dashboards fan out across cards/forecasts; do not starve short
+        # reads behind long model requests. PostgreSQL pooling stays unchanged.
+        kwargs.update(pool_size=16, max_overflow=8, pool_timeout=30)
+        kwargs["connect_args"] = {"timeout": 30}
     return create_engine(url, **kwargs)
 
 

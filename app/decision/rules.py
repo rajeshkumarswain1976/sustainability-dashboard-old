@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any
+from app.decision.jev import catalogue
 
 
 def _choice(label: str) -> dict[str, Any]:
@@ -12,7 +13,8 @@ def decide_many(points: list[str], state: dict[str, Any]) -> dict[str, Any]:
     candidate = state.get("candidate") or {}
     facts = candidate.get("facts") or {}
     context = candidate.get("context") or {}
-    kind = candidate.get("type", "")
+    kind = candidate.get("type", "").removeprefix("predicted_")
+    kind = {"energy_peak": "energy_spike"}.get(kind, kind)
     result = {}
     for point in points:
         if point == "triage.anomaly":
@@ -32,13 +34,24 @@ def decide_many(points: list[str], state: dict[str, Any]) -> dict[str, Any]:
         elif point in {"complaint.cluster", "policy.applicability", "copilot.grounding"}:
             result[point] = {"type": "noul", "noul": 0.0}
         elif point == "incident.type":
-            result[point] = _choice(str(state.get("incident", {}).get("incident_type", "other")))
+            raw = str(state.get("incident", {}).get("incident_type", "other")).lower()
+            label = raw if raw in catalogue()["decisions"][point]["options"] else "other"
+            result[point] = _choice(label)
         elif point == "incident.severity":
-            result[point] = _choice(str(state.get("incident", {}).get("severity", "medium")))
+            raw = str(state.get("incident", {}).get("severity", "medium")).lower()
+            label = raw if raw in catalogue()["decisions"][point]["options"] else "medium"
+            result[point] = _choice(label)
         elif point == "complaint.category":
             result[point] = _choice("other")
         elif point == "copilot.scope":
             result[point] = {"type": "noul", "noul": 0.0}
         else:
             raise KeyError(point)
+    for point, answer in result.items():
+        config = catalogue()["decisions"][point]
+        if answer["type"] == "choice":
+            answer["probabilities"] = {label: float(label == answer["choice"]) for label in config["options"]}
+        elif answer["type"] == "score":
+            answer["probabilities"] = {str(index): float(index == int(answer["score"])) for index in range(len(config["options"]))}
+            answer["legend"] = {str(index): label for index, label in enumerate(config["options"])}
     return {"answers": result, "model": "rules-v1", "cached": False}

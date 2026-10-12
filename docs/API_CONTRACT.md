@@ -111,3 +111,26 @@ Saved forecast/model IDs include the horizon to keep an hourly midnight value se
 Operational forecasts continue using dataset-only inputs. Current-date defaults use the current hour/time rather than a future 23:00 snapshot, and calendar month/year boundaries use IST. Existing source rows, operational action/decision/complaint tables and protected engine logic are unchanged.
 
 Provider contract: https://open-meteo.com/en/docs . Attribution appears beside the weather forecast.
+
+## Phase 3 resumed lifecycle and pending-field metadata
+
+`/dashboard` adds `pending_fields: Record<string,string>` with values `pending phase 4`; existing
+KPI shapes/empty values remain unchanged. History accepts optional `start/end` from the selected
+reporting period, clamps reads to dataset coverage/as_of, and does not invent zeros for missing
+additive readings. Safety zero counts apply only to known areas/dates inside dataset coverage.
+
+Alert responses retain every existing field and add `lead_time_hours:number|null`. `facts`
+additively supports `decisions: {point:{provider,flag,label,probability}}` and `history:[{alert_key,
+type,created_at,level,confidence,status,facts}]`. A real occurrence preserves alert_id, changes
+alert_key/type/created_at to the real event, and keeps the prediction in history. Matching uses
+same node and canonical type within ?1 hour; energy_peak maps to energy_spike. Work orders are
+relinked and updated without resetting status or dropping history. Notification catch-up merges
+stable alert_id so a renamed alert_key cannot create a duplicate.
+
+Alert/action lists resolve selected location IDs into actual descendant/registry entity IDs,
+including the canonical Academic building alias. One score/count source feeds header, sidebar
+and pages. Owner/priority errors remain null and put both alert and action in review. Formula
+savings use excess kWh ? tariff, grid-attributed excess kWh ? GRID_EF, and litres/1000 ? the
+per-kL water tariff. Missing grid attribution yields zero estimated emissions rather than an
+invented solar contribution. Live agreement/calibration is explicitly unevaluated until paired
+Jev/rules records exist; evaluation bins and Brier values are rules proxies, not labeled truth.

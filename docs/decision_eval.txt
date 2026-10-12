@@ -4,3 +4,15 @@ Agreement and probability bins use rules as a comparison proxy, not ground-truth
 A labeled validation set is required to measure true calibration.
 
 No paired Jev/rules decisions found. Run replay with DECISION_PROVIDER=shadow, then rerun this script.
+action.priority: n=0, agreement=not_evaluated, calibration=not_evaluated
+alert.level: n=0, agreement=not_evaluated, calibration=not_evaluated
+complaint.category: n=0, agreement=not_evaluated, calibration=not_evaluated
+complaint.cluster: n=0, agreement=not_evaluated, calibration=not_evaluated
+copilot.grounding: n=0, agreement=not_evaluated, calibration=not_evaluated
+copilot.scope: n=0, agreement=not_evaluated, calibration=not_evaluated
+incident.severity: n=0, agreement=not_evaluated, calibration=not_evaluated
+incident.type: n=0, agreement=not_evaluated, calibration=not_evaluated
+owner.assign: n=0, agreement=not_evaluated, calibration=not_evaluated
+policy.applicability: n=0, agreement=not_evaluated, calibration=not_evaluated
+router.complexity: n=0, agreement=not_evaluated, calibration=not_evaluated
+triage.anomaly: n=0, agreement=not_evaluated, calibration=not_evaluated

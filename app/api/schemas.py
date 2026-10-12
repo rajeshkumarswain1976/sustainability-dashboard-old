@@ -111,6 +111,7 @@ def dashboard_payload(frames: dict[str, pd.DataFrame], alerts: list[dict[str, An
     co2e = total(frames["emissions"], "total_co2e")
     diversion = mean(waste, "diversion_rate") or 0
     return {
+        "pending_fields": {'overview.delta': 'pending phase 4', 'overview.complaints': 'pending phase 4', 'energy.deltaVsPrevWeek': 'pending phase 4', 'energy.avoidedTco2e': 'pending phase 4', 'energy.savingMwh': 'pending phase 4', 'water.deltaAvg': 'pending phase 4', 'water.dailySupplyM3': 'pending phase 4', 'water.leakAnomalyDelta': 'pending phase 4', 'waste.deltaVsLastWeek': 'pending phase 4', 'waste.routeSavingRsWeekly': 'pending phase 4', 'air.outlook': 'pending phase 4', 'assets.criticalTracked': 'pending phase 4', 'assets.failuresTrendPer100': 'pending phase 4', 'assets.calloutSavingRs': 'pending phase 4', 'safety.highRiskZones': 'pending phase 4', 'safety.inspectionsPercent': 'pending phase 4', 'climate.coolingLoadMw': 'pending phase 4', 'sustainability.grade': 'pending phase 4', 'sustainability.ghgEmissionsYearly': 'pending phase 4', 'actions.policyChecks': 'pending phase 4', 'insights.energyVariancePercent': 'pending phase 4'},
         "meta": {"generatedAt": context["as_of"].isoformat(), "filters": {"node": context["node"],
                  "start": context["start"].isoformat(), "end": context["end"].isoformat(),
                  "as_of": context["as_of"].isoformat()}},
@@ -146,7 +147,7 @@ def dashboard_payload(frames: dict[str, pd.DataFrame], alerts: list[dict[str, An
                    "maintenanceDueCount": int(assets.get("maintenance_status", pd.Series(dtype=str)).astype(str).str.lower().isin({"due", "overdue"}).sum()),
                    "unresolvedCount": sum(a["type"] == "asset_risk" for a in open_alerts), "criticalTracked": 0,
                    "failuresTrendPer100": 0, "calloutSavingRs": 0},
-        "mobility": {"dailyEntries": round(total(latest_mobility, "entry_count")), "typicalDelayMin": round(_num(mean(mobility, "delay_min")), 1),
+        "mobility": {"dailyEntries": round(total(latest_mobility, "vehicle_count")), "typicalDelayMin": round(_num(mean(mobility, "delay_min")), 1),
                      "parkingOccupiedPercent": round(occupied / capacity * 100) if capacity else 0,
                      "openCapacitySpaces": round(max(0, capacity - occupied)), "garages": garages},
         "safety": {"openReports": int((safety.get("status", pd.Series(dtype=str)).astype(str).str.lower() != "closed").sum()) if not safety.empty else 0,

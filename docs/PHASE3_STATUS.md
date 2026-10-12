@@ -37,23 +37,38 @@ Preserve those files. No truncated modules found; backend tests and frontend bui
 | C3 Jev transport | DONE | Official pinned model, timeout/retries/batching retained; answer types/probabilities/model validated, copies and locked cache protect repeated/concurrent requests. |
 | C4 Rules matching interface | DONE | Each rules answer type matches its catalogue primitive; conservative copilot yes/no fallback tested. |
 | C5 Router/error/shadow/log/health | DONE | Existing both error modes and shadow tests pass; malformed replies log null label/confidence and route to review; health retains configured/provider status. |
-| D1 Snapshot for all active domains | PARTIAL | Snapshot includes forecasts; pipeline builds a separate smaller snapshot and omits forecast decisions. |
-| D2 Triage/level/complexity gates | PARTIAL | Routing exists; Critical low-confidence exception, full snapshot input and dedupe tests need review. |
-| D3 Predictive candidate routing/lead time | MISSING | Risks persist candidates, but pipeline does not classify stored predicted_* candidates. |
-| D4 Predicted-to-real replacement/history | MISSING | No matching/replacement path or regression test. |
-| D5 Sector actions/formula savings/ownership | PARTIAL | Backend action catalogue, formula savings and decisions exist; low-confidence review/error paths need tests. |
+| D1 Snapshot for all active domains | DONE | Pipeline uses build_snapshot with all 10 active domains, existing forecasts, candidates/hotspots, weather, operations and open alerts. |
+| D2 Triage/level/complexity gates | DONE | High-confidence non-issues drop; intermediate confidence reviews; low-confidence Critical alerts retained for review; repeated processing is deduplicated. |
+| D3 Predictive candidate routing/lead time | DONE | Stored literal predicted_ candidates route through the same decisions; future-issued rows excluded; lead time preserved and exposed. |
+| D4 Predicted-to-real replacement/history | DONE | Same node/type within one hour of expected event reconciles in place; stable alert_id, history and relinked action persist; SSE deduplicates identities. |
+| D5 Sector actions/formula savings/ownership | DONE | Catalogue actions use numeric formulas only; CO2 uses observed grid share, water tariff converts litres to kL; unknown assignments cause review and no invented labels. |
 | D6 Ordered actions/PATCH/head gate | DONE | Existing endpoint and persistence test; validate restart and full status progression. |
 | D7 Decision queue/action/review UI | DONE | Backend action/decision queue restored in the existing design; confidence/review/lead-time display and head-gated status controls connected. |
-| D8 Decision evaluation report | PARTIAL | Existing evaluation script and proxy-calibration report; regenerate and test per-point agreement; no real labeled calibration claimed. |
-| T1 Decision columns | PARTIAL | Existing tests cover some mappings; assert triage, level, router, owner and priority persistence. |
+| D8 Decision evaluation report | DONE | Per-point agreement/proxy Brier/calibration bins implemented and tested; active report has no paired live records and explicitly marks all live metrics not_evaluated. |
+| T1 Decision columns | DONE | Regression asserts five routing/assignment points persisted and owner/priority/source columns match typed decisions. |
 | T2 Timeout both modes / shadow / cache | DONE | Existing mocked tests pass; extend malformed response and catalogue consistency tests. |
 | T3 Story timing/no future alerts | DONE | Existing Phase 2 story regression tests pass; rerun after pipeline changes. |
-| T4 Status order/head gate/restart | PARTIAL | Existing cross-session test; process/engine recreation and all transitions need coverage. |
-| T5 Pipeline twice / predictive replacement | PARTIAL | Ordinary dedupe exists; tests for decision calls, predictive routing/replacement missing. |
+| T4 Status order/head gate/restart | DONE | File-backed database engine recreated after PATCH; status persists and every step/head gate is enforced. |
+| T5 Pipeline twice / predictive replacement | DONE | Normal and predictive replay dedupe, same-hour newly stored predictions, future exclusion, replacement history and one-action preservation tested. |
 | T6 Every location selectable | DONE | Browser verified all 42 IDs selected and sent in successful dashboard requests; search and floor empty-state checks pass. |
-| T7 Every frontend endpoint shape | PARTIAL | Existing contract smoke passes; trend extension and all new controls require updated contract tests. |
-| T8 Browser pages/console errors | DONE | 3 Chromium tests passed: all 12 pages, 42 selections and floor water; no page or console errors. |
+| T7 Every frontend endpoint shape | PARTIAL | Expanded live contract script written; final rerun required after local pool exhaustion fix. |
+| T8 Browser pages/console errors | PARTIAL | Initial 3 Chromium tests passed; extended six-test rerun failed during pool exhaustion and must pass after correction. |
 
 Uncommitted backend files: `src/components/LivingYggdrasil.jsx`, `src/context/DashboardContext.jsx`,
 `src/journey.css`, `src/pages/WelcomeJourney.jsx`; untracked `KnowledgeBase3D.jsx`, `services/sound.js`.
 Initial diff: 4 tracked files, 2,886 insertions, 774 deletions. These are user design edits, not partial backend modules.
+
+## Runtime regression and scope exceptions
+
+A full mixed run reached 85 passing tests, with one environment error because pytest could not
+access the default HP temp directory. scripts/test-backend.ps1 now creates a unique checked
+workspace temp directory. Final rerun is in progress.
+
+Parallel cold model/browser/build work exhausted the local SQLite pool (5 + 2 connections,
+15-second queue timeout), producing HTTP 500. app/db.py now uses 16 + 8 / 30 seconds for
+SQLite only; PostgreSQL pooling remains unchanged. Automatic refresh does not overlap pending
+dashboard loads. This Phase 1 database helper change is justified by the observed failing HTTP
+contract/browser checks. No source tables or rows are changed. Repository location/floor fixes
+were likewise justified by the two initially failing scope tests. Forecasting code is unchanged.
+
+The backend's original welcome/mind-tree edits remain uncommitted and untouched by this resume.

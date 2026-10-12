@@ -14,6 +14,8 @@ from app.analytics.metrics import to_records
 from app.db import get_table
 from app.decision import jev, router
 from app.engine.actions import create_action
+from app.engine import predictive
+from app.engine.scopes import entity_nodes
 from app.engine.replay import load_state, save_state
 
 ANALYZERS = (energy, water, waste, air, traffic, assets, safety, climate)
@@ -27,6 +29,13 @@ def _store_candidate(session: Session, candidate: dict[str, Any]) -> dict[str, A
               "node_id": candidate["node"], "domain": candidate["domain"], "type": candidate["type"],
               "level": None, "status": "candidate", "confidence": None,
               "facts": {"observations": candidate["facts"], "context": candidate["context"]}}
+    if session.execute(select(table.c.alert_id).where(table.c.alert_key == key)).first():
+        return None
+    replacement = predictive.reconcile(session, candidate, values, stamp)
+    if replacement is not None:
+        return {"alert_key": key, "alert_id": replacement["alert_id"], "created_at": stamp.isoformat(),
+                "node": replacement["node_id"], "domain": replacement["domain"], "type": replacement["type"],
+                "level": None, "status": "candidate", "confidence": None, "facts": replacement["facts"]}
     dialect = session.get_bind().dialect.name
     if dialect == "postgresql":
         statement = pg_insert(table).values(**values).on_conflict_do_nothing(index_elements=[table.c.alert_key])
@@ -46,47 +55,54 @@ def _decide_candidate(session: Session, candidate: dict[str, Any], alert: dict[s
                       as_of: datetime, snapshot: dict[str, Any]) -> dict[str, Any]:
     gates = jev.catalogue()["thresholds"]
     act_p, review_p = float(gates["act"]), float(gates["review"])
-    state = {"candidate": candidate, "context": candidate["context"],
-             "weather": snapshot.get("weather", []), "campus_operations": snapshot.get("campus_operations", []),
-             "open_alerts": snapshot.get("open_alerts", [])}
+    state = {**snapshot, "candidate": candidate, "context": candidate["context"]}
     triage = router.decide_many(session, ["triage.anomaly"], state, as_of)["triage.anomaly"]
-    triage_label = router.label(triage)
-    triage_p = router.probability(triage)
+    triage_label, triage_p = router.label(triage), router.probability(triage)
+    level, confidence = None, None
+    decisions = {"triage.anomaly": triage}
     if triage["flag"] == "needs_review":
         status = "needs_review"
     elif triage_label != "real_issue" and triage_p >= 0.7:
         status = "ignored"
-    elif triage_p < review_p:
-        status = "ignored"
-    elif triage_p < act_p:
-        status = "needs_review"
     else:
-        status = "open"
-    level = None
-    confidence = None
-    if status == "open":
         followup = router.decide_many(session, ["alert.level", "router.complexity"], state, as_of)
-        level_result = followup["alert.level"]
-        complexity_result = followup["router.complexity"]
+        decisions.update(followup)
+        level_result, complexity_result = followup["alert.level"], followup["router.complexity"]
         level = router.label(level_result)
         confidence = router.probability(level_result) if level is not None else None
-        if level_result["flag"] == "needs_review" or complexity_result["flag"] == "needs_review":
+        probabilities = [triage_p, confidence or 0, router.probability(complexity_result)]
+        if any(item["flag"] == "needs_review" for item in followup.values()):
             status = "needs_review"
-        elif confidence is not None and confidence < review_p and level != "Critical":
+        elif min(probabilities) < review_p and level != "Critical":
             status = "ignored"
-        elif confidence is not None and confidence < act_p:
-            status = "needs_review"
-        elif router.probability(complexity_result) < act_p:
+        elif min(probabilities) < act_p:
             status = "needs_review"
         elif router.label(complexity_result) == "multi_domain":
             status = "pending_agent"
         elif router.label(complexity_result) == "routine":
+            status = "open"
             action_decisions = router.decide_many(session, ["owner.assign", "action.priority"],
-                                                  {**state, "action": {"alert_key": alert["alert_key"], "level": level}}, as_of)
-            create_action(session, candidate, alert["alert_key"], level, as_of, action_decisions)
+                {**state, "action": {"alert_key": alert["alert_key"], "level": level}}, as_of)
+            decisions.update(action_decisions)
+            action_candidate = {**candidate, "type": predictive.real_type(candidate["type"])}
+            if action_candidate["type"] == "energy_spike":
+                observed = next((row for row in snapshot.get("domains", {}).get("energy", {}).get("current", [])
+                                 if str(row.get("building_id")) == candidate["node"]), {})
+                action_candidate["facts"] = {**candidate["facts"],
+                    "grid_import_kwh": observed.get("grid_import_kwh", candidate["facts"].get("grid_import_kwh"))}
+            action = create_action(session, action_candidate, alert["alert_key"], level, as_of, action_decisions)
+            if action is not None and action.get("needs_review"):
+                status = "needs_review"
+        else:
+            status = "needs_review"
+    facts = {**alert["facts"], "decisions": {point: {
+        "provider": result["provider"], "flag": result["flag"], "label": router.label(result),
+        "probability": router.probability(result)} for point, result in decisions.items()}}
     session.execute(update(get_table("alerts")).where(get_table("alerts").c.alert_key == alert["alert_key"])
-                    .values(level=level, status=status, confidence=confidence))
-    return {**alert, "level": level, "status": status, "confidence": confidence}
+                    .values(level=level, status=status, confidence=confidence, facts=facts))
+    lead = facts.get("observations", {}).get("lead_time_hours")
+    return {**alert, "level": level, "status": status, "confidence": confidence, "facts": facts,
+            "lead_time_hours": lead}
 
 
 def tick(as_of: datetime, node: str = "F01", session: Session | None = None) -> dict[str, Any]:
@@ -95,30 +111,32 @@ def tick(as_of: datetime, node: str = "F01", session: Session | None = None) -> 
     with analysis_session(session) as db:
         if db.get_bind().dialect.name == "postgresql":
             db.execute(text("SELECT pg_advisory_xact_lock(7112882)"))
+        from app.engine.snapshot import build_snapshot
         state = load_state(db)
         previous = datetime.fromisoformat(state["last_processed_at"]) if state.get("last_processed_at") else target - timedelta(hours=1)
         if target <= previous:
+            alerts = []
+            if predictive.pending(db, target):
+                snapshot = build_snapshot(node, target, session=db)
+                alerts = predictive.route_pending(db, node, target, snapshot)
             db.commit()
-            return {"as_of": target.isoformat(), "ticks": [], "new_alerts": []}
+            return {"as_of": target.isoformat(), "ticks": [], "new_alerts": alerts}
         processed = []
         new_alerts = []
         current = previous + timedelta(hours=1)
         while current <= target:
             context = event_context(db, node, current)
             analyses = [module.analyze(node, current, session=db, base_context=context) for module in ANALYZERS]
-            snapshot = {"domains": {item["domain"]: {"current": item["current"], "kpis": item["kpis"]} for item in analyses},
-                        "candidates": [candidate for item in analyses for candidate in item["candidates"]],
-                        "hotspots": {item["domain"]: item["hotspots"] for item in analyses},
-                        "weather": to_records(current_frame(db, "weather", node, current)),
-                        "campus_operations": to_records(current_frame(db, "campus_operations", node, current)),
-                        "open_alerts": list_alerts(db, as_of=current, node=node),
-                        "context": context}
-            alerts = []
+            snapshot = build_snapshot(node, current, session=db, analyses=analyses)
+            from app.analytics.forecast import risks
+            risks(node, current, session=db)
+            alerts = predictive.route_pending(db, node, current, snapshot)
             for analysis in analyses:
                 for item in analysis["candidates"]:
                     stored = _store_candidate(db, item)
                     if stored is not None:
                         alerts.append(_decide_candidate(db, item, stored, current, snapshot))
+            alerts = list({alert["alert_id"]: alert for alert in alerts}.values())
             state["cursor"] = current.isoformat()
             state["last_processed_at"] = current.isoformat()
             state["node"] = node
@@ -129,6 +147,7 @@ def tick(as_of: datetime, node: str = "F01", session: Session | None = None) -> 
             new_alerts.extend(alerts)
             current += timedelta(hours=1)
         db.commit()
+        new_alerts = list({alert["alert_id"]: alert for alert in new_alerts}.values())
         return {"as_of": target.isoformat(), "ticks": processed, "new_alerts": new_alerts}
 
 
@@ -141,9 +160,10 @@ def list_alerts(session: Session, since: datetime | None = None, as_of: datetime
     if as_of is not None:
         statement = statement.where(table.c.created_at <= as_of)
     if node and node != "F01":
-        statement = statement.where(table.c.node_id == node)
+        statement = statement.where(table.c.node_id.in_(entity_nodes(session, node, as_of)))
     return [{"alert_key": row["alert_key"], "alert_id": row["alert_id"],
              "created_at": hour(row["created_at"]).isoformat(), "node": row["node_id"],
              "domain": row["domain"], "type": row["type"], "level": row["level"],
-             "status": row["status"], "confidence": row["confidence"], "facts": row["facts"]}
+             "status": row["status"], "confidence": row["confidence"], "facts": row["facts"],
+             "lead_time_hours": (row["facts"] or {}).get("observations", {}).get("lead_time_hours")}
             for row in session.execute(statement).mappings().all()]

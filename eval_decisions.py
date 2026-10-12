@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_table, runtime_engine
+from app.decision import jev
 
 
 def report(rows: list[dict]) -> str:
@@ -25,9 +26,14 @@ def report(rows: list[dict]) -> str:
              "A labeled validation set is required to measure true calibration.", ""]
     if not per_point:
         lines.append("No paired Jev/rules decisions found. Run replay with DECISION_PROVIDER=shadow, then rerun this script.")
-    for point, pairs in sorted(per_point.items()):
+    for point in sorted(jev.catalogue()["decisions"]):
+        pairs = per_point[point]
+        if not pairs:
+            lines.append(f"{point}: n=0, agreement=not_evaluated, calibration=not_evaluated")
+            continue
         agreement = sum(match for match, _ in pairs) / len(pairs)
-        lines.extend([f"{point}: n={len(pairs)}, agreement={agreement:.3f}"])
+        proxy_brier = sum((probability - int(match)) ** 2 for match, probability in pairs) / len(pairs)
+        lines.extend([f"{point}: n={len(pairs)}, agreement={agreement:.3f}, proxy_brier={proxy_brier:.3f}, calibration=rules_proxy"])
         for lower, upper in ((0, 0.6), (0.6, 0.8), (0.8, 1.01)):
             group = [match for match, probability in pairs if lower <= probability < upper]
             if group:
