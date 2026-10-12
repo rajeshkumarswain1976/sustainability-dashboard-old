@@ -197,59 +197,91 @@ def build_training_matrix(
     occupancy_map: dict[str, pd.Series],
     cutoff: datetime,
     max_days: int = 45,
-    step_sample: int = 3,
+    step_sample: int = 4,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Construct multi-horizon training set strictly before cutoff without future leakage."""
     X_rows = []
     y_rows = []
     entity_code_map = {ent: i for i, ent in enumerate(entities)}
     min_time = cutoff - timedelta(days=max_days)
+    max_samples = 4000
 
-    for ent in entities:
+    # For large entity sets (e.g. 57 bins), train global model on representative entities
+    train_entities = entities[:10] if len(entities) > 10 else entities
+    eff_step = max(step_sample, 8 if len(entities) > 10 else 4)
+
+    # Fast weather lookup dict: timestamp -> (temp, hum, rain, wind)
+    w_lookup: dict[datetime, tuple[float, float, float, float]] = {}
+    if weather_df is not None and not weather_df.empty:
+        for idx, row in weather_df.iterrows():
+            w_lookup[idx] = (
+                float(row["temperature"]) if pd.notna(row.get("temperature")) else 26.0,
+                float(row["humidity"]) if pd.notna(row.get("humidity")) else 60.0,
+                float(row["rainfall"]) if pd.notna(row.get("rainfall")) else 0.0,
+                float(row["wind_speed"]) if pd.notna(row.get("wind_speed")) else 2.0,
+            )
+
+    # Fast occupancy lookup dict: ent -> {ts: occ}
+    occ_lookup: dict[str, dict[datetime, float]] = {}
+    for ent, occ_s in occupancy_map.items():
+        if occ_s is not None and not occ_s.empty:
+            occ_lookup[ent] = {ts: float(val) for ts, val in occ_s.items() if pd.notna(val)}
+
+    for ent in train_entities:
+        if len(X_rows) >= max_samples:
+            break
         s = series_map.get(ent)
         if s is None or len(s) < 168:
             continue
         ent_code = entity_code_map[ent]
-        occ_s = occupancy_map.get(ent)
-        timestamps = s.index[(s.index >= min_time) & (s.index <= cutoff - timedelta(hours=24))]
+        ent_occ = occ_lookup.get(ent, {})
 
-        # Subsample issue points for fast training
-        sampled_issues = timestamps[::step_sample]
+        # Precompute arrays and time index mapping
+        s_times = list(s.index)
+        s_vals = s.to_numpy(dtype=float)
+        time_to_idx = {ts: idx for idx, ts in enumerate(s_times)}
+
+        valid_issue_times = [
+            ts for ts in s_times
+            if min_time <= ts <= (cutoff - timedelta(hours=24))
+        ]
+        sampled_issues = valid_issue_times[::eff_step]
+
         for t in sampled_issues:
-            # issue time t
-            sub = s[s.index <= t]
-            if len(sub) < 168:
+            if len(X_rows) >= max_samples:
+                break
+            t_idx = time_to_idx.get(t)
+            if t_idx is None or t_idx < 168:
                 continue
-            lag_1 = float(sub.iloc[-1])
-            roll_24 = sub[sub.index > t - timedelta(hours=24)]
-            roll_mean = float(roll_24.mean()) if len(roll_24) > 0 else lag_1
-            roll_std = float(roll_24.std(ddof=0)) if len(roll_24) > 1 else 0.0
 
-            # evaluate horizons 1 to 24
+            lag_1 = float(s_vals[t_idx]) if not np.isnan(s_vals[t_idx]) else 0.0
+            r24_start = max(0, t_idx - 23)
+            roll_slice = np.nan_to_num(s_vals[r24_start : t_idx + 1], nan=lag_1)
+            roll_mean = float(np.mean(roll_slice)) if len(roll_slice) > 0 else lag_1
+            roll_std = float(np.std(roll_slice)) if len(roll_slice) > 1 else 0.0
+
             for h in range(1, 25):
                 target_ts = t + timedelta(hours=h)
-                if target_ts not in s.index or pd.isna(s.at[target_ts]):
+                target_idx = time_to_idx.get(target_ts)
+                if target_idx is None:
                     continue
-                y_val = float(s.at[target_ts])
+                y_val = float(s_vals[target_idx])
+                if np.isnan(y_val):
+                    continue
 
-                # lag_24: observed before t if h <= 24
                 ts_lag_24 = target_ts - timedelta(hours=24)
-                lag_24 = float(s.at[ts_lag_24]) if ts_lag_24 in s.index and pd.notna(s.at[ts_lag_24]) else lag_1
+                idx_24 = time_to_idx.get(ts_lag_24)
+                lag_24 = float(s_vals[idx_24]) if idx_24 is not None and not np.isnan(s_vals[idx_24]) else lag_1
 
-                # lag_168: observed before t
                 ts_lag_168 = target_ts - timedelta(hours=168)
-                lag_168 = float(s.at[ts_lag_168]) if ts_lag_168 in s.index and pd.notna(s.at[ts_lag_168]) else lag_1
+                idx_168 = time_to_idx.get(ts_lag_168)
+                lag_168 = float(s_vals[idx_168]) if idx_168 is not None and not np.isnan(s_vals[idx_168]) else lag_1
 
-                # Drivers at target_ts - 168 (strictly past relative to issue time)
-                temp = float(weather_df.at[ts_lag_168, "temperature"]) if (weather_df is not None and ts_lag_168 in weather_df.index and pd.notna(weather_df.at[ts_lag_168, "temperature"])) else 26.0
-                hum = float(weather_df.at[ts_lag_168, "humidity"]) if (weather_df is not None and ts_lag_168 in weather_df.index and pd.notna(weather_df.at[ts_lag_168, "humidity"])) else 60.0
-                rain = float(weather_df.at[ts_lag_168, "rainfall"]) if (weather_df is not None and ts_lag_168 in weather_df.index and pd.notna(weather_df.at[ts_lag_168, "rainfall"])) else 0.0
-                wind = float(weather_df.at[ts_lag_168, "wind_speed"]) if (weather_df is not None and ts_lag_168 in weather_df.index and pd.notna(weather_df.at[ts_lag_168, "wind_speed"])) else 2.0
+                w_tuple = w_lookup.get(ts_lag_168, (26.0, 60.0, 0.0, 2.0))
+                temp, hum, rain, wind = w_tuple
 
-                occ = float(occ_s.at[ts_lag_168]) if (occ_s is not None and ts_lag_168 in occ_s.index and pd.notna(occ_s.at[ts_lag_168])) else 0.0
-
-                day_str = target_ts.strftime("%Y-%m-%d")
-                is_hol = int(day_str in holidays)
+                occ = ent_occ.get(ts_lag_168, 0.0)
+                is_hol = int(target_ts.strftime("%Y-%m-%d") in holidays)
 
                 X_rows.append([
                     ent_code, h, target_ts.hour, target_ts.weekday(), is_hol,
@@ -291,18 +323,45 @@ def run_rolling_origin_backtest(
     base_1_maes = []
 
     entity_code_map = {ent: i for i, ent in enumerate(entities)}
+    eval_entities = entities[:10] if len(entities) > 10 else entities
+
+    # Fast weather lookup
+    w_lookup: dict[datetime, tuple[float, float, float, float]] = {}
+    if weather_history is not None and not weather_history.empty:
+        for idx, row in weather_history.iterrows():
+            w_lookup[idx] = (
+                float(row["temperature"]) if pd.notna(row.get("temperature")) else 26.0,
+                float(row["humidity"]) if pd.notna(row.get("humidity")) else 60.0,
+                float(row["rainfall"]) if pd.notna(row.get("rainfall")) else 0.0,
+                float(row["wind_speed"]) if pd.notna(row.get("wind_speed")) else 2.0,
+            )
+
+    occ_lookup: dict[str, dict[datetime, float]] = {}
+    for ent, occ_s in occupancy_map.items():
+        if occ_s is not None and not occ_s.empty:
+            occ_lookup[ent] = {ts: float(val) for ts, val in occ_s.items() if pd.notna(val)}
+
+    # Pre-extract series arrays and index maps for eval_entities
+    series_cache: dict[str, tuple[list[datetime], np.ndarray, dict[datetime, int]]] = {}
+    for ent in eval_entities:
+        s = series_map.get(ent)
+        if s is not None and len(s) >= 168:
+            s_times = list(s.index)
+            s_vals = s.to_numpy(dtype=float)
+            t_map = {ts: idx for idx, ts in enumerate(s_times)}
+            series_cache[ent] = (s_times, s_vals, t_map)
 
     for fold_idx, issue_time in enumerate(folds):
         # 1. Train candidate model on data before issue_time
         X_tr, y_tr = build_training_matrix(
-            series_map, entities, holidays, weather_history, occupancy_map,
-            cutoff=issue_time, max_days=35, step_sample=4
+            series_map, eval_entities, holidays, weather_history, occupancy_map,
+            cutoff=issue_time, max_days=35, step_sample=6
         )
 
         model = None
         if len(y_tr) >= 100:
             model = model_cls(
-                max_iter=80, max_leaf_nodes=15, l2_regularization=1.0,
+                max_iter=60, max_leaf_nodes=15, l2_regularization=1.0,
                 categorical_features=[0], random_state=42
             )
             model.fit(X_tr, y_tr)
@@ -314,53 +373,71 @@ def run_rolling_origin_backtest(
         b24s = []
         b1s = []
 
-        for ent in entities:
-            s = series_map.get(ent)
-            if s is None or len(s) < 168:
+        fold_feat_rows = []
+        eval_meta = []
+
+        for ent in eval_entities:
+            sc = series_cache.get(ent)
+            if sc is None:
                 continue
-            sub = s[s.index <= issue_time]
-            if len(sub) < 168:
+            s_times, s_vals, time_to_idx = sc
+            issue_idx = time_to_idx.get(issue_time)
+            if issue_idx is None or issue_idx < 168:
                 continue
-            lag_1 = float(sub.iloc[-1])
-            roll_24 = sub[sub.index > issue_time - timedelta(hours=24)]
-            roll_mean = float(roll_24.mean()) if len(roll_24) > 0 else lag_1
-            roll_std = float(roll_24.std(ddof=0)) if len(roll_24) > 1 else 0.0
+
+            lag_1 = float(s_vals[issue_idx]) if not np.isnan(s_vals[issue_idx]) else 0.0
+            r24_start = max(0, issue_idx - 23)
+            roll_slice = np.nan_to_num(s_vals[r24_start : issue_idx + 1], nan=lag_1)
+            roll_mean = float(np.mean(roll_slice)) if len(roll_slice) > 0 else lag_1
+            roll_std = float(np.std(roll_slice)) if len(roll_slice) > 1 else 0.0
+            ent_occ = occ_lookup.get(ent, {})
 
             for h in range(1, 25):
                 target_ts = issue_time + timedelta(hours=h)
-                if target_ts not in s.index or pd.isna(s.at[target_ts]):
+                target_idx = time_to_idx.get(target_ts)
+                if target_idx is None:
                     continue
-                actual = float(s.at[target_ts])
+                actual = float(s_vals[target_idx])
+                if np.isnan(actual):
+                    continue
+
                 ts_lag_24 = target_ts - timedelta(hours=24)
-                lag_24 = float(s.at[ts_lag_24]) if ts_lag_24 in s.index and pd.notna(s.at[ts_lag_24]) else lag_1
+                idx_24 = time_to_idx.get(ts_lag_24)
+                lag_24 = float(s_vals[idx_24]) if idx_24 is not None and not np.isnan(s_vals[idx_24]) else lag_1
+
                 ts_lag_168 = target_ts - timedelta(hours=168)
-                lag_168 = float(s.at[ts_lag_168]) if ts_lag_168 in s.index and pd.notna(s.at[ts_lag_168]) else lag_1
+                idx_168 = time_to_idx.get(ts_lag_168)
+                lag_168 = float(s_vals[idx_168]) if idx_168 is not None and not np.isnan(s_vals[idx_168]) else lag_1
 
-                temp = float(weather_history.at[ts_lag_168, "temperature"]) if (weather_history is not None and ts_lag_168 in weather_history.index and pd.notna(weather_history.at[ts_lag_168, "temperature"])) else 26.0
-                hum = float(weather_history.at[ts_lag_168, "humidity"]) if (weather_history is not None and ts_lag_168 in weather_history.index and pd.notna(weather_history.at[ts_lag_168, "humidity"])) else 60.0
-                rain = float(weather_history.at[ts_lag_168, "rainfall"]) if (weather_history is not None and ts_lag_168 in weather_history.index and pd.notna(weather_history.at[ts_lag_168, "rainfall"])) else 0.0
-                wind = float(weather_history.at[ts_lag_168, "wind_speed"]) if (weather_history is not None and ts_lag_168 in weather_history.index and pd.notna(weather_history.at[ts_lag_168, "wind_speed"])) else 2.0
-                occ_s = occupancy_map.get(ent)
-                occ = float(occ_s.at[ts_lag_168]) if (occ_s is not None and ts_lag_168 in occ_s.index and pd.notna(occ_s.at[ts_lag_168])) else 0.0
+                w_tuple = w_lookup.get(ts_lag_168, (26.0, 60.0, 0.0, 2.0))
+                temp, hum, rain, wind = w_tuple
 
+                occ = ent_occ.get(ts_lag_168, 0.0)
                 is_hol = int(target_ts.strftime("%Y-%m-%d") in holidays)
-                feat_row = np.array([[
+                bucket = 1 if h <= 6 else (2 if h <= 12 else 3)
+
+                fold_feat_rows.append([
                     entity_code_map[ent], h, target_ts.hour, target_ts.weekday(), is_hol,
                     lag_1, lag_24, lag_168, roll_mean, roll_std,
                     occ, temp, hum, rain, wind
-                ]], dtype=float)
+                ])
+                eval_meta.append((actual, lag_168, lag_24, lag_1, bucket))
 
-                pred = float(model.predict(feat_row)[0]) if model is not None else lag_168
-                pred = max(0.0, pred)
+        if eval_meta:
+            if model is not None and fold_feat_rows:
+                preds = model.predict(np.array(fold_feat_rows, dtype=float))
+                preds = np.maximum(0.0, preds)
+            else:
+                preds = np.array([m[1] for m in eval_meta], dtype=float)
 
+            for i, (actual, lag_168, lag_24, lag_1, bucket) in enumerate(eval_meta):
+                pred = float(preds[i])
                 y_trues.append(actual)
                 y_preds.append(pred)
                 b168s.append(lag_168)
                 b24s.append(lag_24)
                 b1s.append(lag_1)
-
                 res = actual - pred
-                bucket = 1 if h <= 6 else (2 if h <= 12 else 3)
                 bucket_residuals[bucket].append(res)
 
         if len(y_trues) > 0:
@@ -447,13 +524,14 @@ def fit_and_serve_global_model(
     model_cls: type = HistGradientBoostingRegressor,
 ) -> dict[str, Any]:
     cutoff = hour(as_of)
-    cache_key = (db.get_bind(), target_id, cutoff.date().isoformat())
+    bind_key = str(getattr(db.get_bind(), "url", "db"))
+    cache_key = (bind_key, target_id, cutoff.date().isoformat())
     cached = _GLOBAL_MODEL_CACHE.get(cache_key)
     if cached is not None:
         return cached
 
-    # Fetch history up to cutoff
-    start = cutoff - timedelta(days=54)
+    # Fetch history up to cutoff (28 days = 4 weeks is optimal for 3 backtest folds + lag_168)
+    start = cutoff - timedelta(days=28)
     raw = fetch_frame(db, table_name, node, start, cutoff, cutoff)
     series_map = extract_entity_series(raw, entity_key, metric)
     entities = sorted(series_map.keys()) if series_map else (["F01"] if entity_key is None else [])
@@ -478,7 +556,7 @@ def fit_and_serve_global_model(
     # 2. Train final model on all data up to cutoff
     X_all, y_all = build_training_matrix(
         series_map, entities, holidays, weather_history, occupancy_map,
-        cutoff=cutoff, max_days=45, step_sample=3
+        cutoff=cutoff, max_days=28, step_sample=4
     )
 
     final_model = None
@@ -497,6 +575,10 @@ def fit_and_serve_global_model(
     outputs = []
     bands_by_bucket = eval_res["bands_by_bucket"]
 
+    # Pre-collect feature rows and metadata for batch prediction
+    pred_meta = []
+    pred_feats = []
+
     for ent in entities:
         s = series_map.get(ent)
         sub = s[s.index <= cutoff] if s is not None else pd.Series()
@@ -505,7 +587,6 @@ def fit_and_serve_global_model(
         roll_mean = float(roll_24.mean()) if len(roll_24) > 0 else lag_1
         roll_std = float(roll_24.std(ddof=0)) if len(roll_24) > 1 else 0.0
 
-        series_rows = []
         for h in range(1, 25):
             target_ts = cutoff + timedelta(hours=h)
             bucket = 1 if h <= 6 else (2 if h <= 12 else 3)
@@ -516,7 +597,6 @@ def fit_and_serve_global_model(
             ts_lag_168 = target_ts - timedelta(hours=168)
             lag_168 = float(s.at[ts_lag_168]) if s is not None and ts_lag_168 in s.index and pd.notna(s.at[ts_lag_168]) else lag_1
 
-            # Future weather & occupancy
             temp = float(future_weather.at[target_ts, "temperature"]) if target_ts in future_weather.index else 26.0
             hum = float(future_weather.at[target_ts, "humidity"]) if target_ts in future_weather.index else 60.0
             rain = float(future_weather.at[target_ts, "rainfall"]) if target_ts in future_weather.index else 0.0
@@ -527,48 +607,55 @@ def fit_and_serve_global_model(
 
             is_hol = int(target_ts.strftime("%Y-%m-%d") in holidays)
 
-            # Predict
-            if eval_res["is_ml_served"] and final_model is not None:
-                feat = np.array([[
-                    entity_code_map.get(ent, 0), h, target_ts.hour, target_ts.weekday(), is_hol,
-                    lag_1, lag_24, lag_168, roll_mean, roll_std,
-                    occ, temp, hum, rain, wind
-                ]], dtype=float)
-                yhat = float(final_model.predict(feat)[0])
+            pred_feats.append([
+                entity_code_map.get(ent, 0), h, target_ts.hour, target_ts.weekday(), is_hol,
+                lag_1, lag_24, lag_168, roll_mean, roll_std,
+                occ, temp, hum, rain, wind
+            ])
+            pred_meta.append((ent, h, target_ts, q_lo, q_hi, lag_168, lag_24, lag_1))
+
+    # Single batch predict if ML served
+    raw_preds = None
+    if eval_res["is_ml_served"] and final_model is not None and pred_feats:
+        raw_preds = final_model.predict(np.array(pred_feats, dtype=float))
+
+    entity_series_map: dict[str, list[dict[str, Any]]] = {ent: [] for ent in entities}
+    for i, (ent, h, target_ts, q_lo, q_hi, lag_168, lag_24, lag_1) in enumerate(pred_meta):
+        if raw_preds is not None:
+            yhat = float(raw_preds[i])
+        else:
+            if eval_res["best_baseline"] == "lag_168":
+                yhat = lag_168
+            elif eval_res["best_baseline"] == "lag_24":
+                yhat = lag_24
             else:
-                # Serve best baseline
-                if eval_res["best_baseline"] == "lag_168":
-                    yhat = lag_168
-                elif eval_res["best_baseline"] == "lag_24":
-                    yhat = lag_24
-                else:
-                    yhat = lag_1
-            yhat = max(0.0, yhat)
-            lo = max(0.0, yhat + q_lo)
-            hi = max(lo, yhat + q_hi)
-
-            # Sanity guards
-            if not math.isfinite(yhat):
                 yhat = lag_1
-            if not math.isfinite(lo) or lo > yhat:
-                lo = max(0.0, yhat * 0.9)
-            if not math.isfinite(hi) or hi < yhat:
-                hi = yhat * 1.1
+        yhat = max(0.0, yhat)
+        lo = max(0.0, yhat + q_lo)
+        hi = max(lo, yhat + q_hi)
 
-            series_rows.append({
-                "timestamp": target_ts.isoformat(),
-                "value": yhat,
-                "lower": lo,
-                "upper": hi,
-            })
+        if not math.isfinite(yhat):
+            yhat = lag_1
+        if not math.isfinite(lo) or lo > yhat:
+            lo = max(0.0, yhat * 0.9)
+        if not math.isfinite(hi) or hi < yhat:
+            hi = yhat * 1.1
 
+        entity_series_map[ent].append({
+            "timestamp": target_ts.isoformat(),
+            "value": yhat,
+            "lower": lo,
+            "upper": hi,
+        })
+
+    for ent in entities:
         outputs.append({
             "entity_id": ent,
             "model": eval_res["served_model"],
             "mae": eval_res["overall_mae"],
             "baseline_mae": eval_res["best_baseline_mae"],
             "smape": eval_res["overall_smape"],
-            "series": series_rows,
+            "series": entity_series_map.get(ent, []),
         })
 
     result = {

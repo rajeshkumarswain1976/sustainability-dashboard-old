@@ -21,7 +21,7 @@ def build_snapshot(node: str, as_of: datetime, session=None) -> dict[str, Any]:
                 "domains": {item["domain"]: {"current": item["current"], "kpis": item["kpis"],
                                              "data_source": item["data_source"]} for item in analyses},
                 "forecasts": {domain: forecast(domain, node, as_of, session=db)
-                              for domain in ("energy", "water", "parking")},
+                              for domain in ("energy", "water", "waste", "parking", "air", "weather", "climate", "emissions", "assets", "safety", "sustainability")},
                 "candidates": [candidate for item in analyses for candidate in item["candidates"]],
                 "hotspots": {item["domain"]: item["hotspots"] for item in analyses},
                 "campus_operations": to_records(current_frame(db, "campus_operations", node, as_of)),
