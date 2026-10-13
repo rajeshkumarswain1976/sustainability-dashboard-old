@@ -101,6 +101,14 @@ config/        sector, decision and forecast settings
 
 ## Getting started
 
+### Deploy the whole app on Render
+
+The root `render.yaml` now deploys the current React frontend and complete
+FastAPI backend as **one Docker Web Service with one public URL**. Push the
+configuration and `deployment/` folder, choose **New > Blueprint** on Render,
+and provide your database/API credentials and administrator email/password.
+See [deployment instructions](deployment/README.md).
+
 **Requirements:** Node.js (LTS), Python 3.11, and a Neon Postgres database (or SQLite for local work).
 
 **1. Backend**

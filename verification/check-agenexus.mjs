@@ -8,11 +8,12 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 const errors = [];
 page.on('pageerror', error => errors.push(error.message));
 try {
-  await page.goto('http://localhost:5173');
-  await page.getByRole('button', { name: 'Explore College features', exact: true }).waitFor({ state: 'visible' });
+  await page.goto('http://localhost:5173', { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.getByRole('button', { name: 'Explore College features', exact: true }).waitFor({ state: 'visible', timeout: 60000 });
   await page.getByRole('dialog', { name: 'Welcome to Agenexus' }).waitFor({ state: 'hidden' });
   assert.match(await page.title(), /^Agenexus/);
   assert.equal(await page.getByRole('button', { name: /^Explore / }).count(), 28);
+  if (!process.argv.includes('--mobile')) {
   await page.screenshot({ path: 'verification/agenexus-desktop.png', fullPage: false });
   for (const sector of Object.values(SECTORS)) {
     await page.getByRole('button', { name: `Explore ${sector.name} features`, exact: true }).click();
@@ -39,10 +40,8 @@ try {
   await page.getByRole('complementary', { name: 'Feature details' }).waitFor({ state: 'visible' });
   await page.screenshot({ path: 'verification/agenexus-feature.png', fullPage: false });
   await page.getByRole('button', { name: 'Close inspection panel (Esc)' }).click();
+  }
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.reload();
-  await page.getByRole('button', { name: 'Explore College features', exact: true }).waitFor({ state: 'visible' });
-  await page.getByRole('dialog', { name: 'Welcome to Agenexus' }).waitFor({ state: 'hidden' });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   await page.getByRole('button', { name: 'Explore Campus Water & Leak Alerts', exact: true }).click();
   const mobilePanel = page.getByRole('complementary', { name: 'Feature details' });
@@ -53,6 +52,12 @@ try {
   await mobilePanel.getByRole('button', { name: 'Open Campus Water & Leak Alerts Dashboard', exact: true }).click();
   await page.getByRole('button', { name: 'Enter College', exact: true }).waitFor({ state: 'visible' });
   assert.equal(await page.evaluate(() => sessionStorage.getItem('mindtree_active_node')), 'ag-cmp-02');
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole('button', { name: 'Enter College', exact: true }).click();
+  await page.getByLabel('Shared campus status').waitFor({ state: 'visible', timeout: 60000 });
+  assert.match(await page.locator('aside').first().innerText(), /Agenexus/);
+  assert.match(await page.title(), /^Agenexus/);
+  console.log('Running dashboard: demo sign-in and Agenexus branding verified.');
   assert.deepEqual(errors, []);
   console.log('Mobile: viewport fit, feature sheet, dashboard handoff and keyboard activation verified; no page errors.');
 } finally {

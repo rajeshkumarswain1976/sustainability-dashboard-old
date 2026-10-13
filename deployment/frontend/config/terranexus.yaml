@@ -1,0 +1,27 @@
+version: 1
+language:
+  model: openai/gpt-oss-20b
+  timeout_seconds: 25
+  max_tool_rounds: 3
+  recommendation_words: 60
+retrieval:
+  minimum_score: 0.05
+  top_k: 3
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
+  local_embeddings_only: true
+comparison:
+  intervention_fractions: [0, 0.5, 1]
+  weights:
+    energy_kwh: 0.25
+    saving_inr: 0.20
+    saving_co2e: 0.20
+    water_litres: 0.20
+    risk_reduction: 0.15
+  top_k: 3
+complaints:
+  max_submissions_per_window: 20
+  submission_window_minutes: 10
+  cluster_alert_count: 5
+  cluster_window_hours: 24
+  statuses: [open, triaged, assigned, in_progress, resolved, rejected]
+  high_urgency: [high, critical]

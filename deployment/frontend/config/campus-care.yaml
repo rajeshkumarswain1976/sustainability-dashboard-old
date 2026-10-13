@@ -1,0 +1,18 @@
+# Routing comes from the guided selection. AI assesses optional free text.
+# SLA hours are deployment policy targets, never predictions of repair duration.
+retention_days: 90
+submissions_per_hour: 5
+confidence_threshold: 0.85
+issues:
+  light: {title: Light not working, department: Electricity, category: energy, owner: Facilities, sla_hours: 24}
+  fan: {title: Fan not working or slow, department: Electricity, category: energy, owner: Facilities, sla_hours: 24}
+  power: {title: Power outage, department: Electricity, category: energy, owner: Facilities, sla_hours: 4}
+  leak: {title: Leaking pipe or tap, department: Water, category: water, owner: Plumbing, sla_hours: 4}
+  no_water: {title: No water supply, department: Water, category: water, owner: Plumbing, sla_hours: 4}
+  drinking: {title: Drinking water or RO issue, department: Water, category: water, owner: Plumbing, sla_hours: 8}
+  bin: {title: Dustbin overflowing, department: Waste, category: waste, owner: Housekeeping, sla_hours: 4}
+  cleaning: {title: Area needs cleaning, department: Waste, category: waste, owner: Housekeeping, sla_hours: 8}
+  wifi: {title: Wi-Fi unavailable or slow, department: Wi-Fi, category: other, owner: IT, sla_hours: 24}
+  cooling: {title: Air conditioning or ventilation issue, department: Air & Cooling, category: air, owner: Facilities, sla_hours: 8}
+  furniture: {title: Damaged furniture or equipment, department: Assets, category: assets, owner: Facilities, sla_hours: 48}
+  hazard: {title: Safety concern, department: Safety, category: safety, owner: Security, sla_hours: 1}

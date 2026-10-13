@@ -1,0 +1,36 @@
+# One public URL serves the frontend and complete FastAPI backend.
+services:
+  - type: web
+    name: agenexus
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL_DIRECT
+        sync: false
+      - key: JEV_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: CARE_SESSION_SECRET
+        generateValue: true
+      - key: DASHBOARD_DEMO_MODE
+        value: "false"
+      - key: DATA_DIR
+        value: datasets
+      - key: SECTOR
+        value: college
+      - key: REPLAY_ALIGN_TODAY
+        value: "true"
+      - key: WEATHER_FORECAST_ENABLED
+        value: "true"
+      - key: TZ
+        value: Asia/Kolkata

@@ -104,6 +104,7 @@ export default function LivingAgenticCore({
 
   // Expanded sub-feature index in details panel
   const [expandedSubfeature, setExpandedSubfeature] = useState(null);
+  useEffect(() => { setExpandedSubfeature(null); }, [selectedNode?.id]);
 
   // Camera Pan & Zoom state
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -241,7 +242,7 @@ export default function LivingAgenticCore({
 
     const scaleX = w / spanX;
     const scaleY = h / spanY;
-    const autoZoom = Math.min(Math.max(Math.min(scaleX, scaleY) * 0.94, 0.62), 1.0);
+    const autoZoom = Math.min(Math.max(Math.min(scaleX, scaleY) * 0.94, 0.18), 1.0);
 
     setZoom(autoZoom);
     setPan({ x: 0, y: 0 });
@@ -299,7 +300,7 @@ export default function LivingAgenticCore({
     if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.08 : 0.92;
-    setZoom(prev => Math.min(2.2, Math.max(0.45, prev * factor)));
+    setZoom(prev => Math.min(2.2, Math.max(0.18, prev * factor)));
   };
 
   const handleCenterKB = () => {
@@ -878,7 +879,7 @@ export default function LivingAgenticCore({
 
                       {/* Node Code */}
                       <span
-                        className="text-[9px] font-mono font-bold tracking-tight"
+                        className="text-[9px] font-mono font-bold tracking-tight shrink-0 whitespace-nowrap"
                         style={{ color: isNodeSelected ? '#FFFFFF' : s.color }}
                       >
                         {node.code}
@@ -934,7 +935,7 @@ export default function LivingAgenticCore({
             {/* Camera Zoom, Center & Fit Controls (PART 10) */}
             <div className="flex items-center gap-1 bg-[#09090b]/90 backdrop-blur-md border border-[#1f2023] p-1 rounded-2xl shadow-lg pointer-events-auto">
               <button
-                onClick={() => setZoom(prev => Math.max(0.45, prev - 0.15))}
+                onClick={() => setZoom(prev => Math.max(0.18, prev - 0.15))}
                 className="w-8 h-8 flex items-center justify-center rounded-xl text-[#A1A1AA] hover:text-[#FAFAFA] hover:bg-[#18181B] font-bold text-sm transition-colors"
                 title="Zoom Out"
               >
