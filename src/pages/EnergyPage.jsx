@@ -303,7 +303,7 @@ export default function EnergyPage() {
 
             <div className="p-3.5 bg-[#191A23] border border-[#262835] rounded-xl flex items-baseline justify-between">
               <div>
-                <span className="text-xl font-black text-white">{savingMwh} MWh</span>
+                <span className="text-xl font-black text-white">0 MWh</span>
                 <div className="text-[11px] text-dark-400">Monthly potential</div>
               </div>
               <div className="text-right">

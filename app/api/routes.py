@@ -33,6 +33,11 @@ from app.sector.config import load_sector_config
 from app import replay_calendar
 
 router = APIRouter()
+_stream_delegate = None
+
+def set_stream_delegate(delegate):
+    global _stream_delegate
+    _stream_delegate = delegate
 IST = ZoneInfo("Asia/Kolkata")
 DEFAULT_START = datetime.fromisoformat("2026-08-17T00:00:00+05:30")
 DEFAULT_END = datetime.fromisoformat("2026-10-09T23:00:00+05:30")
@@ -487,6 +492,9 @@ def stream(
     engine = runtime_engine()
     if engine is None:
         raise HTTPException(status_code=503, detail="Database is not configured")
+
+    if _stream_delegate is not None:
+        return _stream_delegate(node=node, as_of=as_of, limit=limit)
 
     def run_tick(target: datetime):
         with DbSession(engine) as db:

@@ -70,9 +70,9 @@ export default function Sidebar() {
         </div>
         <div>
           <div className="text-white font-bold text-base tracking-tight flex items-center gap-1.5">
-            {organizationName} <span className="text-[10px] bg-[#22242E] text-brand-orange px-1.5 py-0.5 rounded font-mono font-medium">OS</span>
+            Agenexus <span className="text-[10px] bg-[#22242E] text-brand-orange px-1.5 py-0.5 rounded font-mono font-medium">OS</span>
           </div>
-          <div className="text-xs text-dark-400">Operations & Sustainability</div>
+          <div className="text-xs text-dark-400">{organizationName} · Operations</div>
         </div>
       </div>
 

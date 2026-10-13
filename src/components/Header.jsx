@@ -135,7 +135,7 @@ export default function Header({ breadcrumbExtra }) {
               onClick={() => setCurrentPage('overview')} 
               className="text-dark-400 font-medium hover:text-white cursor-pointer transition"
             >
-              {organizationName}
+              Agenexus
             </span>
             <span className="text-dark-500">›</span>
             <span 

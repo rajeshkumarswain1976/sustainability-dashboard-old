@@ -71,7 +71,7 @@ export default function LoginPage() {
         <div className="text-center z-10 max-w-lg mt-2 space-y-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#171922] border border-[#272B3B] text-xs font-mono text-brand-orange">
             <span className="w-2 h-2 rounded-full bg-brand-orange animate-ping" />
-            <span>Campus A · Sustainability OS v2.0</span>
+            <span>Agenexus · Facility intelligence</span>
           </div>
 
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white">
@@ -113,7 +113,7 @@ export default function LoginPage() {
           </div>
           <div>
             <div className="text-lg font-bold text-white flex items-center gap-1.5">
-              Campus A <span className="text-[10px] bg-[#22242E] text-brand-orange px-1.5 py-0.5 rounded font-mono font-medium">OS</span>
+              Agenexus <span className="text-[10px] bg-[#22242E] text-brand-orange px-1.5 py-0.5 rounded font-mono font-medium">OS</span>
             </div>
             <div className="text-xs text-dark-400">Sustainability & Facilities Operations</div>
           </div>

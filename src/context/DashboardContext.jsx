@@ -84,7 +84,7 @@ export function DashboardProvider({ children }) {
   const [theme, setTheme] = useState(() => window.localStorage.getItem('campus-theme') || 'dark');
   const organizationName = selectedWorld === 'enterprise'
     ? institutionType === 'public' ? 'Municipality' : 'Company'
-    : selectedWorld === 'hospital' ? 'Hospital Network' : 'Campus A';
+    : selectedWorld === 'hospital' ? 'Hospital' : selectedWorld === 'intelligence' ? 'Intelligence' : 'College';
 
   const [currentPage, setCurrentPage] = useState('overview');
   const [filters, setFilters] = useState(() => ({ ...DEFAULT_FILTERS, snapshotDate: snapshotLabel() }));
@@ -116,11 +116,12 @@ export function DashboardProvider({ children }) {
       campus: { accent: '#76B58F', deep: '#3E8061', glow: 'rgba(118, 181, 143, 0.18)' },
       enterprise: { accent: '#D8A35D', deep: '#A96E31', glow: 'rgba(216, 163, 93, 0.18)' },
       hospital: { accent: '#62B8C4', deep: '#348894', glow: 'rgba(98, 184, 196, 0.18)' },
+      intelligence: { accent: '#A58AD6', deep: '#7555A6', glow: 'rgba(165, 138, 214, 0.18)' },
     };
     const activePalette = palette[selectedWorld] || palette.campus;
     document.documentElement.dataset.theme = theme;
     document.documentElement.dataset.world = selectedWorld;
-    document.title = `${organizationName} · Stewardship Systems`;
+    document.title = `Agenexus · ${organizationName}`;
     document.documentElement.style.setProperty('--sector-accent', activePalette.accent);
     document.documentElement.style.setProperty('--sector-accent-deep', activePalette.deep);
     document.documentElement.style.setProperty('--sector-glow', activePalette.glow);

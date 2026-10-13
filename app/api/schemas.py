@@ -173,3 +173,12 @@ def dashboard_payload(frames: dict[str, pd.DataFrame], alerts: list[dict[str, An
                     "resolvedCount": sum(a["status"] == "done" for a in actions), "policyChecks": "0 / 0"},
         "insights": {"dailySavingRs": round(sum(a["saving_inr"] for a in actions)), "energyVariancePercent": ""},
     }
+
+
+def action_intelligence(payload: dict[str, Any]) -> dict[str, Any]:
+    """Additive frontend shapes for verified agent explanations and alternatives."""
+    explanation = payload.get("agent") or payload.get("explanation") or {}
+    return {"explanation": explanation,
+            "sources": explanation.get("source_details") or explanation.get("sources", []),
+            "why": explanation.get("why"),
+            "alternatives": explanation.get("comparison", {}).get("options", [])}

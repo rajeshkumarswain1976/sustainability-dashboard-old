@@ -2,27 +2,59 @@ sector: college
 active: true
 version: 1
 domains:
-  - energy
-  - water
-  - waste
-  - air
-  - assets
-  - mobility
-  - safety
-  - climate
-  - sustainability
-  - emissions
+- energy
+- water
+- waste
+- air
+- assets
+- mobility
+- safety
+- climate
+- sustainability
+- emissions
 kpis:
-  energy: [energy_kwh, peak_demand_kw, grid_import_kwh, solar_generation_kwh]
-  water: [water_consumption_litres, leak_count, days_of_water_available]
-  waste: [waste_weight, fill_percentage, overflow_count, diversion_rate]
-  air: [aqi_cpcb, pm25, pm10]
-  assets: [utilisation, availability, downtime_hours, maintenance_due]
-  mobility: [vehicle_count, delay_min, parking_occupancy_ratio]
-  safety: [incident_count, high_severity_count, response_time]
-  climate: [heat_risk, flood_risk, climate_readiness_score]
-  sustainability: [sustainability_score]
-  emissions: [energy_co2e, mobility_co2e, waste_co2e, total_co2e]
+  energy:
+  - energy_kwh
+  - peak_demand_kw
+  - grid_import_kwh
+  - solar_generation_kwh
+  water:
+  - water_consumption_litres
+  - leak_count
+  - days_of_water_available
+  waste:
+  - waste_weight
+  - fill_percentage
+  - overflow_count
+  - diversion_rate
+  air:
+  - aqi_cpcb
+  - pm25
+  - pm10
+  assets:
+  - utilisation
+  - availability
+  - downtime_hours
+  - maintenance_due
+  mobility:
+  - vehicle_count
+  - delay_min
+  - parking_occupancy_ratio
+  safety:
+  - incident_count
+  - high_severity_count
+  - response_time
+  climate:
+  - heat_risk
+  - flood_risk
+  - climate_readiness_score
+  sustainability:
+  - sustainability_score
+  emissions:
+  - energy_co2e
+  - mobility_co2e
+  - waste_co2e
+  - total_co2e
 thresholds:
   energy_spike_pct: 18
   energy_sigma: 2.5
@@ -48,21 +80,43 @@ thresholds:
   safety_recurrence_days: 30
   safety_recurrence_count: 2
   hotspot_count: 5
-  high_severity_labels: [high, critical]
-holidays: [2026-10-02]
+  high_severity_labels:
+  - high
+  - critical
+holidays:
+- 2026-10-02
 actions:
-  - inspect_equipment
-  - schedule_maintenance
-  - investigate_leak
-  - dispatch_waste_collection
-  - review_energy_spike
-  - inspect_air_quality
-  - manage_parking
-  - check_drains
-  - prepare_heat_response
-  - respond_safety_incident
+- inspect_equipment
+- schedule_maintenance
+- investigate_leak
+- dispatch_waste_collection
+- review_energy_spike
+- inspect_air_quality
+- manage_parking
+- check_drains
+- prepare_heat_response
+- respond_safety_incident
 docs_folder: knowledge/college
 tools:
-  - query_domain_metrics
-  - compare_periods
-  - simulate_rule_scenario
+- query_domain_metrics
+- compare_periods
+- simulate_rule_scenario
+- get_energy
+- get_water
+- get_waste
+- get_air
+- get_assets
+- get_mobility
+- get_safety
+- get_climate
+- get_alerts
+- get_forecast
+- get_score
+- search_knowledge
+- simulate_action
+agent_objective:
+  energy_kwh: 0.25
+  saving_inr: 0.2
+  saving_co2e: 0.2
+  water_litres: 0.2
+  risk_reduction: 0.15

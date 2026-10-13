@@ -10,6 +10,7 @@ from sqlalchemy import insert, select, update
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.api.schemas import action_intelligence
 from app.engine.scopes import entity_nodes
 from app.db import get_table
 from app.decision import jev, router
@@ -97,7 +98,7 @@ def _map_row(row: dict[str, Any]) -> dict[str, Any]:
             "needs_review": bool(payload.get("needs_review")),
             "estimate_available": payload.get("estimate_available", True),
             "history": payload.get("history", []),
-            "explanation": payload.get("explanation") or payload.get("agent"),
+            **action_intelligence(payload),
             "created_at": row["created_at"].isoformat() if row["created_at"] else None}
 
 

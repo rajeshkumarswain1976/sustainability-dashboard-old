@@ -35,7 +35,7 @@ def test_jev_request_schema_and_cache(monkeypatch):
                                    "confidence": 0.85}}, "usage": {"input_tokens": 100, "output_tokens": 20}}
 
     class FakeClient:
-        def __init__(self, timeout): assert timeout == 2.0
+        def __init__(self, timeout): assert timeout == 8.0
         def __enter__(self): return self
         def __exit__(self, *_): pass
         def post(self, url, json, headers):
@@ -58,7 +58,7 @@ def test_jev_request_schema_and_cache(monkeypatch):
 def test_jev_timeout_retries_twice(monkeypatch):
     calls = []
     class TimeoutClient:
-        def __init__(self, timeout): assert timeout == 2.0
+        def __init__(self, timeout): assert timeout == 8.0
         def __enter__(self): return self
         def __exit__(self, *_): pass
         def post(self, *_args, **_kwargs):

@@ -65,7 +65,43 @@ def request_state(points: list[str], state: dict[str, Any]) -> dict[str, Any]:
         if isinstance(value, list):
             return [compact(item) for item in value]
         return value
-    return {key: compact(value) for key, value in state.items() if key in fields}
+    projected = {key: compact(value) for key, value in state.items() if key in fields}
+    candidate = state.get("candidate") or {}
+    domain = candidate.get("domain")
+    entity = str(candidate.get("node", ""))
+    if isinstance(projected.get("forecasts"), dict) and domain:
+        wanted = {domain, "parking" if domain == "mobility" else domain, "weather"}
+        if any(float(row.get("rainfall") or 0) > 0 for row in state.get("weather", []) if isinstance(row, dict)):
+            wanted.add("climate")
+        for alert in state.get("open_alerts", []):
+            if isinstance(alert, dict) and alert.get("node") == entity:
+                wanted.add(alert.get("domain"))
+        filtered = {}
+        for name, forecast in projected["forecasts"].items():
+            if name not in wanted or not isinstance(forecast, dict):
+                continue
+            forecast = dict(forecast)
+            entities = forecast.get("forecasts")
+            if isinstance(entities, list):
+                matching = [item for item in entities if str(item.get("entity_id")) in {entity, str(state.get("node"))}]
+                forecast["forecasts"] = matching or entities[:1]
+                forecast["entity_count"] = len(entities)
+                forecast["entity_selection"] = "candidate/facility entities; otherwise first available source entity"
+            forecast.pop("floor_forecasts", None)
+            filtered[name] = forecast
+        projected["forecasts"] = filtered
+    if isinstance(projected.get("open_alerts"), list):
+        alerts = projected["open_alerts"]
+        ordered = sorted(alerts, key=lambda alert: (alert.get("node") != entity, alert.get("domain") != domain, alert.get("level") != "Critical"))
+        projected["open_alerts"] = [{key: alert.get(key) for key in ("alert_key", "node", "domain", "type", "level", "status", "confidence")} for alert in ordered[:10]]
+    # UTF-8 bytes provide a conservative bound without a remote tokenizer or
+    # guessing the provider's tokenization. Never ship an oversized snapshot.
+    if len(json.dumps(projected, default=str).encode("utf-8")) > 24000:
+        projected.pop("forecasts", None)
+        projected["context"] = {**projected.get("context", {}), "forecast_context_omitted": "request budget exceeded; no values substituted"}
+    if len(json.dumps(projected, default=str).encode("utf-8")) > 28000:
+        raise ValueError("Normalized Jev input exceeds the safe request budget")
+    return projected
 
 
 def _decide_many(points: list[str], state: dict[str, Any]) -> dict[str, Any]:
@@ -81,7 +117,7 @@ def _decide_many(points: list[str], state: dict[str, Any]) -> dict[str, Any]:
     if not endpoint.endswith("/v1/systemone"):
         endpoint += "/v1/systemone"
     # One initial attempt and two retries. Never retry invalid credentials or schema.
-    with httpx.Client(timeout=2.0) as client:
+    with httpx.Client(timeout=8.0) as client:
         for attempt in range(3):
             try:
                 response = client.post(endpoint, json=body, headers={"Authorization": f"Bearer {settings.jev_api_key}"})
