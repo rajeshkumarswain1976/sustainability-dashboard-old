@@ -8,7 +8,9 @@ RUN npm run build
 
 FROM python:3.11-slim-bookworm
 WORKDIR /app
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
+    DATA_DIR=datasets SECTOR=college TZ=Asia/Kolkata \
+    REPLAY_ALIGN_TODAY=true WEATHER_FORECAST_ENABLED=true DASHBOARD_DEMO_MODE=false
 COPY requirements.txt ./
 COPY deployment/requirements.txt ./deployment/requirements.txt
 RUN pip install --no-cache-dir -r deployment/requirements.txt

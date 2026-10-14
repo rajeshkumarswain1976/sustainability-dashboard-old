@@ -20,6 +20,11 @@ not use the Blueprint's generated value.
 
 The container builds the frontend with development build dependencies, then runs
 the Python server on Render's `PORT`. `/healthz` is the health-check endpoint.
+Runtime defaults also apply to manual Docker deployments: `DATA_DIR=datasets`,
+`REPLAY_ALIGN_TODAY=true` and `WEATHER_FORECAST_ENABLED=true`. If you previously
+set `REPLAY_ALIGN_TODAY=false` in Render Environment, change it to `true`; an
+explicit environment value overrides these defaults. Historical source dates
+remain unchanged in the database and are mapped to today for the dashboard.
 Render's assigned URL automatically supplies the allowed frontend origin and the
 CampusCare public URL. A custom domain can override these with `FRONTEND_ORIGIN`
 and `CARE_PUBLIC_URL`.

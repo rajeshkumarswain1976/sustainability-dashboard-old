@@ -12,6 +12,15 @@ from starlette.staticfiles import StaticFiles
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "deployment" / "frontend"
 os.environ.setdefault("DASHBOARD_BACKEND_ROOT", str(ROOT))
+for key, value in {
+    "DATA_DIR": "datasets",
+    "SECTOR": "college",
+    "TZ": "Asia/Kolkata",
+    "REPLAY_ALIGN_TODAY": "true",
+    "WEATHER_FORECAST_ENABLED": "true",
+    "DASHBOARD_DEMO_MODE": "false",
+}.items():
+    os.environ.setdefault(key, value)
 public_url = os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/")
 if public_url:
     os.environ.setdefault("FRONTEND_ORIGIN", public_url)
