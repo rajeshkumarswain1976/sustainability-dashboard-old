@@ -1,6 +1,6 @@
 # AgeNexus
 
-Smart campus monitoring, forecasting and complaint handling. TerraNexus watches energy, water, waste, air, equipment, traffic, safety and climate in one place, flags problems as they happen, forecasts what comes next, and tells staff what to do about it. Students and staff can also raise campus complaints, which are routed to the right team automatically.
+Smart campus monitoring, forecasting and complaint handling. AgeNexus watches energy, water, waste, air, equipment, traffic, safety and climate in one place, flags problems as they happen, forecasts what comes next, and tells staff what to do about it. Students and staff can also raise campus complaints, which are routed to the right team automatically.
 
 Colleges are fully supported today. Hospitals are next.
 
@@ -53,7 +53,7 @@ Source data -> Adapters -> Database + location tree -> Replay clock
   -> Alerts and actions -> Dashboard
 ```
 
-TerraNexus keeps four jobs strictly apart:
+AgeNexus keeps four jobs strictly apart:
 
 | Engine | Tool | Job | Never |
 |---|---|---|---|
