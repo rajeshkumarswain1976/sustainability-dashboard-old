@@ -98,13 +98,14 @@ def fetch_frame(
     start: datetime,
     end: datetime,
     as_of: datetime,
+    resolved_scope: tuple[dict[str, set[str]], dict[str, Any]] | None = None,
 ) -> pd.DataFrame:
     table = DOMAIN_TABLES.get(table_name)
     if table is None:
         table = get_table(table_name)
     if table is None:
         return pd.DataFrame()
-    scope, target = resolve_scope(session, node)
+    scope, target = resolved_scope if resolved_scope is not None else resolve_scope(session, node)
     calendar_offset = replay_calendar.offset()
     lower = _ist(start) - calendar_offset
     upper = min(_ist(end), _ist(as_of)) - calendar_offset
@@ -144,6 +145,11 @@ def fetch_frame(
     frame = pd.DataFrame([dict(row) for row in rows])
     if frame.empty:
         return frame
+    # The existing Neon sustainability table stores these two CSV numeric
+    # fields as VARCHAR; normalize them after retrieval so analytics and API
+    # payloads still receive numeric values without a PostgreSQL type error.
+    if table_name == "sustainability":
+        frame = _normalize_sustainability_scores(frame)
     # SQLite returns naive timestamps; preserve the API's IST contract.
     time_columns = {"timestamp", "timestamp_start", "timestamp_end", "date", "predicted_overflow_time",
                     "collection_time", "last_collection_time"}
@@ -157,6 +163,13 @@ def fetch_frame(
             else:
                 parsed = parsed.dt.tz_convert("Asia/Kolkata")
             frame[column] = parsed + calendar_offset
+    return frame
+
+
+def _normalize_sustainability_scores(frame: pd.DataFrame) -> pd.DataFrame:
+    for name in ("climate_score", "sustainability_score"):
+        if name in frame:
+            frame[name] = pd.to_numeric(frame[name], errors="coerce")
     return frame
 
 

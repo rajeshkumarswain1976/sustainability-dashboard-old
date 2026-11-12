@@ -28,6 +28,13 @@ metadata = MetaData()
 _metadata_lock = RLock()
 DOMAIN_TABLES: dict[str, Table] = {}
 MASTER_TABLES: dict[str, Table] = {}
+# These two Neon columns were imported as VARCHAR even though the active CSVs
+# contain numeric scores. Keep the SQLAlchemy result type text-compatible;
+# repository.fetch_frame converts their values to numbers after fetching.
+TEXT_NUMERIC_COLUMNS = {
+    ("sustainability", "climate_score"),
+    ("sustainability", "sustainability_score"),
+}
 
 
 def _sample_columns(path: Path) -> tuple[list[str], dict[str, list[str]]]:
@@ -74,6 +81,12 @@ def _column_type(name: str, values: list[str]) -> Any:
     return Float()
 
 
+def _domain_column_type(table_name: str, name: str, values: list[str]) -> Any:
+    if (table_name, name) in TEXT_NUMERIC_COLUMNS:
+        return String(500)
+    return _column_type(name, values)
+
+
 def _add_domain_tables() -> None:
     if DOMAIN_TABLES:
         return
@@ -81,7 +94,7 @@ def _add_domain_tables() -> None:
         if not re.fullmatch(r"[a-z][a-z0-9_]*", name):
             raise ValueError("A source table name is not a safe SQL identifier")
         columns, samples = _sample_columns(path)
-        table_columns = [Column(column, _column_type(column, samples[column]), nullable=True) for column in columns]
+        table_columns = [Column(column, _domain_column_type(name, column, samples[column]), nullable=True) for column in columns]
         table = Table(name, metadata, *table_columns)
         for indexed in ("timestamp", "building_id", "floor_id", "zone_id", "meter_id", "bin_id", "asset_id"):
             if indexed in table.c:

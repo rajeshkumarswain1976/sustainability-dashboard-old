@@ -22,6 +22,8 @@ services:
         sync: false
       - key: CARE_SESSION_SECRET
         generateValue: true
+      - key: CARE_REQUIRE_CAMPUS_NETWORK
+        value: "false"
       - key: DASHBOARD_DEMO_MODE
         value: "false"
       - key: DATA_DIR

@@ -9,11 +9,11 @@ from sqlalchemy.orm import Session
 
 from app.analytics.rollup import rollup
 
-REPLAY_MODE = "real_time_historical_data_replay"
+REPLAY_MODE = "synthetic_historical_replay"
 DOMAIN_SOURCES = {
-    "energy": "measured_historical_replay_allocated_to_floors",
-    "emissions": "derived_replay",
-    "sustainability": "derived_replay",
+    "energy": "synthetic_replay",
+    "emissions": "synthetic_derived_replay",
+    "sustainability": "synthetic_derived_replay",
     "weather": "synthetic_replay",
     "air": "synthetic_replay",
     "water": "synthetic_replay",
@@ -22,8 +22,8 @@ DOMAIN_SOURCES = {
     "assets": "synthetic_replay",
     "safety": "synthetic_replay",
     "climate": "synthetic_replay",
-    "overview": "derived_replay",
-    "insights": "derived_replay",
+    "overview": "synthetic_derived_replay",
+    "insights": "synthetic_derived_replay",
     "operations": "synthetic_replay",
 }
 

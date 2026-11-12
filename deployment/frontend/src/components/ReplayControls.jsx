@@ -28,6 +28,6 @@ export default function ReplayControls() {
       {[1, 10, 60, 360, 3600].map(speed => <option key={speed} value={speed}>{speed}× · {3600/speed}s per hour</option>)}
     </select>
     <span className="text-dark-400">{replayState?.cursor ? new Date(replayState.cursor).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST' : 'Replay paused'}</span>
-    {replayState?.running&&<span role="status" className={status?.error?'text-rose-300':'text-dark-400'}>{status?.error?`Replay needs attention: ${status.error}`:status?.processing?'Processing readings and decisions…':'Backend clock active'}</span>}
+    {replayState?.running&&<span role="status" className={status?.error?'text-rose-300':'text-dark-400'}>{status?.error?`Replay needs attention: ${status.error}`:status?.processing?'Processing synthetic readings and decisions…':'Synthetic replay active'}</span>}
   </div>;
 }

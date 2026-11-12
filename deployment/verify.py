@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT))
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["DATABASE_URL_DIRECT"] = "sqlite:///:memory:"
 os.environ["DASHBOARD_DEMO_MODE"] = "false"
+os.environ["DASHBOARD_DISABLE_BACKGROUND_JOBS"] = "true"
 os.environ["FRONTEND_ORIGIN"] = "https://agenexus.example"
 os.environ.pop("ADMIN_EMAIL", None)
 os.environ.pop("ADMIN_PASSWORD", None)
@@ -67,6 +68,7 @@ from sqlalchemy import create_engine, insert, select
 from unittest.mock import patch
 from app.db import get_table
 from server.storage import tables
+from server.auth import verify_password
 engine = create_engine("sqlite:///:memory:")
 locations = get_table("location_dim")
 locations.create(engine)
@@ -82,6 +84,7 @@ with patch("app.db.create_db_engine", return_value=engine), patch.object(engine,
     prepare_database()
     with engine.connect() as connection:
         rows = connection.execute(select(tables().tables["app_users"])).mappings().all()
-        assert len(rows) == 1 and rows[0]["password_hash"] == original["password_hash"]
+        assert len(rows) == 1 and rows[0]["password_hash"] != original["password_hash"]
+        assert verify_password(os.environ["ADMIN_PASSWORD"], rows[0]["password_hash"])
 engine.dispose()
 print("Production checks passed: assets, SPA/API routing, cookies, authentication, lifespan and idempotent administrator provisioning.")

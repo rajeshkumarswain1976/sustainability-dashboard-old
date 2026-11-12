@@ -77,7 +77,7 @@ class CampusAAdapter(DataAdapter):
         # Registry reference tables do not always carry a row-level source field.
         # Keep provenance explicit for those rows without altering the source CSV.
         if path.stem == "registry_emission_factors" and "data_source" not in frame.columns:
-            frame["data_source"] = "provided_registry"
+            frame["data_source"] = "synthetic_assumed"
         frame = frame.replace([np.inf, -np.inf], np.nan)
         for column in frame.columns:
             key = column.lower()

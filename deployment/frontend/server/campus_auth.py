@@ -49,14 +49,18 @@ def campus_check(request):
     # Never trust client-supplied forwarded IPs. Configure uvicorn's trusted
     # proxy allowlist when deploying behind a reverse proxy.
     try: address = ip_address(request.client.host)
-    except (ValueError, AttributeError): return {'inside': False, 'configured': bool(values('CAMPUS_IP_CIDRS')), 'demo': False}
+    except (ValueError, AttributeError):
+        address = None
     networks = values('CAMPUS_IP_CIDRS')
-    local_demo = demo_mode() and address.is_loopback
-    return {'inside': local_demo or any(address in ip_network(cidr, strict=False) for cidr in networks),
-            'configured': bool(networks), 'demo': local_demo}
+    local_demo = bool(address and demo_mode() and address.is_loopback)
+    inside = bool(address and (local_demo or any(address in ip_network(cidr, strict=False) for cidr in networks)))
+    network_required = os.getenv('CARE_REQUIRE_CAMPUS_NETWORK', 'false').lower() == 'true'
+    return {'inside': inside, 'configured': bool(networks), 'demo': local_demo,
+            'submission_allowed': inside or not network_required}
 
 def require_campus(request):
-    if not campus_check(request)['inside']: raise HTTPException(403, 'Join the campus network to raise or support a complaint. Tracking is available anywhere.')
+    if not campus_check(request)['submission_allowed']:
+        raise HTTPException(403, 'Join the campus network to raise or support a complaint. Tracking is available anywhere.')
 
 def oauth_client(provider):
     if provider not in {'google', 'microsoft'}: raise HTTPException(404, 'Unknown sign-in provider')

@@ -1,0 +1,35 @@
+{
+  "classification": "synthetic campus simulation",
+  "seed": 20261111,
+  "generator": "scripts/generate_synthetic_datasets.py",
+  "generated_on": "2026-11-11",
+  "timezone": "Asia/Kolkata",
+  "start": "2025-11-11T00:00:00+05:30",
+  "end": "2026-11-10T23:00:00+05:30",
+  "template_bundle_sha256": "813540330d2639fb198fbf629d8752a1f076a2221ca2817b6b93b11193611cd4",
+  "source_profile_note": "Frozen from the repository's prior synthetic top-level CSV profiles; no measured campus inputs.",
+  "assumptions": [
+    "one prior synthetic weekday/hour profile is replayed per unit",
+    "energy receives a shared smooth annual seasonal multiplier",
+    "weather receives a seasonal annual temperature and monsoon rainfall cycle, applied consistently to linked climate and air rows",
+    "heat risk = clamp((Steadman/Rothfusz heat index in C - 27) * 5, 0, 100)",
+    "flood risk = clamp(max(rainfall_6h / 6, rainfall * 0.4) * 50 * exposure * (1 + low_lying) / (10 + 0.5 * drainage_capacity), 0, 100)",
+    "18% synthetic energy anomalies are present only in matching signal windows",
+    "safety events and derived signal windows are resampled with the fixed seed",
+    "the composite is the equal-weight mean of available daily factor scores; it is a relative simulation index, not a certified sustainability rating",
+    "each daily factor score is an empirical percentile rank within this simulation window; lower resource use per person-hour, AQI, vehicle counts, incident counts, climate risk, and emissions per person-hour rank higher; asset availability ranks higher when higher; zero-occupancy days use absolute daily use"
+  ],
+  "intentional_nulls": {
+    "assets_equipment.mtbf,mttr": "not computed because the synthetic source has no per-asset failure history",
+    "assets_equipment.vibration": "not applicable to assets without a vibration sensor; partial nulls are flagged in telemetry_gap",
+    "assets_equipment.availability": "not applicable while AST028 is out of service with zero scheduled available hours",
+    "water_hourly.occupancy": "not applicable to central meter M15, which has no building assignment",
+    "signals_energy.z_score": "unavailable where baseline dispersion was not estimable",
+    "safety_incidents.asset_id": "not applicable to incidents not linked to a specific asset",
+    "water_resources.days_of_water_available": "unavailable where no finite usable-water depletion estimate is present",
+    "waste_hourly.fill_rate": "not applicable when there is no usable fill change over the preceding interval",
+    "waste_hourly.predicted_overflow_time": "not applicable when no overflow is predicted",
+    "waste_hourly.collection_time,last_collection_time": "not applicable before/when a bin has no collection event",
+    "climate_resilience.climate_readiness_score": "unavailable because no defensible score formula is documented"
+  }
+}

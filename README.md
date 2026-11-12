@@ -22,8 +22,8 @@ Colleges are fully supported today. Hospitals are next.
 - Charts with solid history, a dashed forecast with an uncertainty band, and a "now" marker
 - Light and dark themes, mobile-friendly layout, loading, retry and empty states
 
-**Live monitoring**
-- Historical data replays hour by hour like a live feed, with start, pause, seek and speed controls
+**Synthetic replay**
+- Synthetic historical data replays hour by hour, with start, pause, seek and speed controls
 - New alerts reach the browser over Server-Sent Events, with automatic reconnect and catch-up
 - Optional calendar shift so the replay ends on today's date
 
@@ -172,7 +172,7 @@ Most requests take `node`, `start`, `end` and `as_of`. Queries never return rows
 
 ## Data
 
-Only building power is measured. Weather, air, occupancy, water, waste, traffic, equipment and safety data are synthetic, and every response carries a `data_source` tag so the interface can say which is which. The dataset covers 7 buildings, 28 floors and about 290,000 hourly records, and a generator runs 49 checks before the data is loaded.
+All active campus readings are synthetic; no operational campus measurements are included. API responses identify the synthetic replay classification, and source CSVs carry row-level provenance. The top-level CSVs in `datasets/` are the adapter inputs; `datasets/cleaned/` contains historical audit reports only. Regenerate the deterministic simulation with `python scripts/generate_synthetic_datasets.py --seed 20261111 --end-date 2026-11-10`, then validate it with `python scripts/validate_synthetic_datasets.py`. The generator keeps the existing CSV schemas and writes schema and provenance manifests. Emission components use the documented factors in `registry_emission_factors.csv`; unsupported composite scores are left blank.
 
 ## Roles
 

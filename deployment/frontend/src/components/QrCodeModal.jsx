@@ -18,17 +18,17 @@ import {
   Wind, 
   AlertCircle 
 } from 'lucide-react';
-import { useDashboard } from '../context/DashboardContext';
+import { useOptionalDashboard } from '../context/DashboardContext';
 
 const ISSUES = [
   { id: '', label: 'General / Any Issue' },
   { id: 'leak', label: 'Water · Leak or Tap' },
-  { id: 'water-shortage', label: 'Water · Low Pressure / Supply' },
+  { id: 'no_water', label: 'Water · Low Pressure / Supply' },
   { id: 'light', label: 'Electricity · Light Not Working' },
   { id: 'power', label: 'Electricity · Power Outage' },
   { id: 'fan', label: 'Electricity · Fan Malfunction' },
-  { id: 'ac', label: 'Air · AC / Cooling Failure' },
-  { id: 'bin-overflow', label: 'Waste · Bin Overflow' },
+  { id: 'cooling', label: 'Air · AC / Cooling Failure' },
+  { id: 'bin', label: 'Waste · Bin Overflow' },
   { id: 'wifi', label: 'Wi-Fi · Network Outage' },
   { id: 'furniture', label: 'Assets · Furniture Repair' },
 ];
@@ -45,12 +45,7 @@ const DEFAULT_LOCATIONS = [
 ];
 
 export default function QrCodeModal({ isOpen, onClose, initialNode = '', locations: propLocations }) {
-  let contextData = null;
-  try {
-    contextData = useDashboard();
-  } catch {
-    // Called outside DashboardProvider
-  }
+  const contextData = useOptionalDashboard();
   const rawLocations = (propLocations && propLocations.length > 0) ? propLocations : (contextData?.locations || []);
   const locations = rawLocations.length > 0 ? rawLocations : DEFAULT_LOCATIONS;
   const showToast = contextData?.showToast || ((msg) => console.log(msg));

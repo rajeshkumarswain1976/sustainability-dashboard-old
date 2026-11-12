@@ -1,10 +1,12 @@
 # Generated campus datasets
 
-`generate_all.py` creates the CSVs in this folder for 1,296 hourly timestamps from 2026-08-17 through 2026-10-09 (Asia/Kolkata).
+Run `python scripts/generate_synthetic_datasets.py --seed 20261111 --end-date 2026-11-10` from the repository root to rebuild this exact 365-day window in Asia/Kolkata. Omit `--end-date` to end yesterday; the default seed is `20261111`, and `--seed N` selects another deterministic stream. The first run freezes the existing synthetic weekday/hour profiles in `scripts/synthetic_seed_profiles.zip` so later runs use the same starting data.
 
-- Building energy is derived from the included measured source at `energy_dataset/energy_dataset/all_buildings_power.csv`. The historical hourly pattern is replayed over the output window; it is not a live 2026 meter feed.
-- Weather, air quality, occupancy, water, waste, traffic, assets, safety events, and registry assumptions are synthetic. Weather and air quality are populated even when optional API files are absent.
-- Derived tables are linked to those inputs and preserve the generator's allocation and consistency checks. Blank event timestamps or IDs mean “not applicable” for that row, such as no pickup or no predicted overflow.
-- `validation_report.txt` records coverage, row counts, and cross-table checks.
+- Every domain, including energy, is synthetic; no campus measurements are used. The dashboard fetches these rows from the configured database and replays them as a live-style synthetic feed.
+- Hourly readings preserve weekday/hour profiles and receive seasonal modulation. The weather cycle uses a smooth annual temperature curve, hourly variation, and a June–October monsoon rainfall window. Synthetic energy excursions are synchronized to `signals_energy.csv` and applied at both building and floor level.
+- Emissions are derived as floor energy × the `grid` factor in `registry_emission_factors.csv`, plus the synthetic mobility and waste components. Nine daily sustainability factors are derived from resource use per person-hour, AQI, vehicle counts, asset availability, incident counts, climate risk and emissions per person-hour. On zero-occupancy days, absolute use replaces a per-person ratio. Lower-impact indicators rank higher; asset availability ranks higher when it improves. Each factor is an empirical percentile within this simulation window and the composite is their equal-weight mean; it is a relative synthetic index, not a certified rating.
+- Regenerate only the score table with `python scripts/derive_sustainability_scores.py` after editing source readings. The main generator runs the same derivation on its staged files before replacing active CSVs.
+- `synthetic_provenance.json` records seed, dates, assumptions, intentional blanks, and the frozen-profile hash. `synthetic_schema.json` preserves the expected column order. `validation_report.txt` records generated row counts. Run `python scripts/validate_synthetic_datasets.py` to check schemas, continuity, keys, provenance, ranges, relationships, and rollups.
+- The dashboard loads only top-level CSVs in this folder. `cleaned/` contains historical audit reports only and is not an ingestion source.
 
-These are realistic synthetic dashboard datasets, not a substitute for live campus measurements.
+These are synthetic simulation readings suitable for a replay/demo dashboard, not actual campus measurements.

@@ -86,21 +86,35 @@ def install(app):
             with engine.connect() as connection:
                 connection.execute(text('PRAGMA journal_mode=WAL'));connection.commit()
             ensure_tables(engine)
-        elif any(not inspect(engine).has_table(name) for name in ('complaint_events','app_users','app_sessions','auth_attempts', *NAMES)):
-            raise RuntimeError('Run the additive TerraNexus operational migration with the direct loader URL before starting the configured database')
+        else:
+            required_tables={'complaint_events','app_users','app_sessions','auth_attempts', *NAMES}
+            missing_tables=required_tables-set(inspect(engine).get_table_names())
+            if missing_tables:
+                raise RuntimeError('Run the additive TerraNexus operational migration with the direct loader URL before starting the configured database')
         from sqlalchemy.orm import Session
-        with Session(engine) as session:bootstrap_demo(session)
+        with Session(engine) as session:
+            bootstrap_demo(session)
+            if demo_mode() and engine.dialect.name == 'sqlite':
+                from server.demo_seed import seed_demo_workflow
+                seed_demo_workflow(session)
     previous_lifespan=app.router.lifespan_context
     @asynccontextmanager
     async def lifespan(application):
         initialize()
         async with previous_lifespan(application) as state:
-            from server.campus_jobs import run
-            jobs = asyncio.create_task(run())
+            background_enabled=os.getenv('DASHBOARD_DISABLE_BACKGROUND_JOBS','false').lower()!='true'
+            jobs=None
+            if background_enabled:
+                from server.campus_jobs import run
+                jobs=asyncio.create_task(run())
             try:
-                async with worker.lifespan():yield state
+                if background_enabled:
+                    async with worker.lifespan():yield state
+                else:
+                    yield state
             finally:
-                jobs.cancel()
-                try: await jobs
-                except asyncio.CancelledError: pass
+                if jobs:
+                    jobs.cancel()
+                    try: await jobs
+                    except asyncio.CancelledError: pass
     app.router.lifespan_context=lifespan

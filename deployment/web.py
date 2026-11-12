@@ -48,11 +48,19 @@ def prepare_database():
         with engine.begin() as bind:
             ensure_tables(bind)
         if email and password:
+            import json
             with Session(engine) as session:
                 users = tables().tables["app_users"]
-                if not session.execute(select(users.c.user_id).where(users.c.user_id == "render-admin")).first():
-                    provision(session, "render-admin", email, password, "admin", ["F01"])
-                    session.commit()
+                email_owner = session.execute(select(users).where(users.c.email == email.lower())).mappings().first()
+                if email_owner:
+                    profile = json.loads(email_owner["profile"])
+                    if profile.get("key") != "admin":
+                        raise RuntimeError("ADMIN_EMAIL is already assigned to a non-admin account")
+                    admin_id = email_owner["user_id"]
+                else:
+                    admin_id = "render-admin"
+                provision(session, admin_id, email, password, "admin", ["F01"])
+                session.commit()
     finally:
         engine.dispose()
 

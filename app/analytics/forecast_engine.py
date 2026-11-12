@@ -1394,10 +1394,12 @@ def forecast_sustainability_domain(db: Session, node: str, as_of: datetime) -> d
     history = fetch_frame(db, "sustainability", node, cutoff - timedelta(days=28), cutoff, cutoff)
     latest = history[history["date"] == history["date"].max()] if not history.empty else history
     base_score = calc_sustainability_score(latest)
+    status = "available" if base_score is not None else "unavailable"
     daily_series = [] if base_score is None else [
         {"timestamp": (cutoff.date() + timedelta(days=d)).isoformat(), "value": base_score,
          "lower": base_score, "upper": base_score} for d in range(1, 8)]
-    return {"domain": "sustainability", "node": node, "as_of": cutoff.isoformat(),
+    return {"domain": "sustainability", "node": node, "as_of": cutoff.isoformat(), "status": status,
+            "availability_reason": None if base_score is not None else "No documented sustainability score formula is available for these synthetic inputs.",
             "model": "seasonal", "projection": True,
             "projection_basis": "Last observed score held constant; KPI score forecast formulas are unavailable",
             "forecasts": [] if base_score is None else [{"entity_id": node, "model": "seasonal",

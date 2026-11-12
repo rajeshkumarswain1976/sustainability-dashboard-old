@@ -2,7 +2,7 @@ version: 1
 language:
   model: openai/gpt-oss-20b
   timeout_seconds: 25
-  max_tool_rounds: 3
+  max_tool_rounds: 2
   recommendation_words: 60
 retrieval:
   minimum_score: 0.05

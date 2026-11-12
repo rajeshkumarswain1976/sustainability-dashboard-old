@@ -51,6 +51,10 @@ def test_catalogue_target_returns_finite_ordered_bands(database, target):
     with Session(database) as session:
         response = forecasts.forecast(target['domain'], 'F01', AS_OF, session,
                                       metric=target['metric'], horizon=target['horizons'][0])
+    if target['domain'] == 'sustainability':
+        assert response['status'] == 'unavailable'
+        assert not response['forecasts'] and not response['series']
+        return
     assert response['forecasts'], target['id']
     for entity in response['forecasts']:
         assert entity['series']
@@ -225,6 +229,9 @@ def test_every_widget_forecast_contract_and_derived_persistence(database):
                 body = response.json()
                 if target['method'] == 'pending':
                     assert body['status'] == 'pending' and not body['forecasts']
+                    continue
+                if body.get('status') == 'unavailable':
+                    assert target['domain'] == 'sustainability' and not body['forecasts']
                     continue
                 assert body['node'] == 'F01'
                 assert body['as_of'] == AS_OF.isoformat()

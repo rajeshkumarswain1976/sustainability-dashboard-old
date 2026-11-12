@@ -90,7 +90,7 @@ export default function ClimatePage({ setCurrentPage }) {
 
             <div className="my-2">
               <div className="text-4xl font-black text-white tracking-tight flex items-baseline gap-2">
-                {climate?.preparednessIndex ?? 68} <span className="text-sm font-normal text-dark-400">/ 100 · live index</span>
+                {climate?.preparednessIndex ?? '—'} <span className="text-sm font-normal text-dark-400">/ 100 · synthetic estimate</span>
               </div>
               <p className="text-xs text-dark-300 mt-2 leading-relaxed">
                 {USE_MOCK ? "Heat stress and Friday's rainfall elevate exposure around low-lying paths. Core operations remain within response capacity." : 'Preparedness and risk values use the selected dataset readings.'} <strong className="text-amber-400">{USE_MOCK ? "▲ 14 pts above seasonal baseline" : "Not available"}</strong>

@@ -1,4 +1,4 @@
-Source CSVs are preserved in the parent datasets folder.
+Historical cleaning audit only. The processed replay CSV copies described below were removed; this folder now retains only audit reports. The active source CSVs remain in the parent datasets folder.
 Replay window: source observations dated Oct 1-9, 2026, shifted +3 days to Oct 4-12, 2026 (Asia/Kolkata, UTC+05:30).
 Non-October observation rows are excluded from these replay copies; originals retain all rows.
 All-blank and all-zero columns are removed. No all-zero columns existed in the full source; telemetry_gap and imputed_flag became all-zero after selecting October observations and were removed. Blank-only fields removed: safety_incidents.asset_id; sustainability.climate_score; sustainability.sustainability_score.

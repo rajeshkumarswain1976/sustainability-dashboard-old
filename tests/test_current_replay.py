@@ -15,7 +15,7 @@ from app.db import get_metadata, get_table, get_session
 from app.main import app
 
 NOW = datetime.fromisoformat('2027-01-02T10:30:00+05:30')
-SOURCE = datetime.fromisoformat('2026-10-09T10:00:00+05:30')
+SOURCE = datetime.fromisoformat('2026-11-10T10:00:00+05:30')
 
 
 @pytest.fixture
@@ -39,7 +39,7 @@ def test_today_mapping_preserves_values_and_excludes_future_rows(shifted):
         assert result.energy_kwh.tolist() == [99, 100]
         assert list(result.timestamp.dt.date.astype(str)) == ['2027-01-02', '2027-01-02']
         original = list(db.execute(select(get_table('energy_building_hourly').c.timestamp)).scalars())
-        assert all(value.date().isoformat() == '2026-10-09' for value in original)
+        assert all(value.date().isoformat() == '2026-11-10' for value in original)
 
 
 def test_api_replay_initializes_today_and_follows_midnight(shifted, monkeypatch):

@@ -312,7 +312,9 @@ def sustainability(context: dict[str, object] = Depends(request_context), sessio
                  "energy_score": mean(frame, "energy_score"), "water_score": mean(frame, "water_score"),
                  "waste_score": mean(frame, "waste_score"), "air_score": mean(frame, "air_score"),
                  "mobility_score": mean(frame, "mobility_score"), "assets_score": mean(frame, "assets_score"),
-                 "safety_score": mean(frame, "safety_score"), "emissions_score": mean(frame, "emissions_score")},
+                 "safety_score": mean(frame, "safety_score"), "climate_score": mean(frame, "climate_score"),
+                 "emissions_score": mean(frame, "emissions_score")},
+        "score_method": "Equal mean of nine daily factor scores; factors are empirical percentile ranks within the synthetic history window, not a certified sustainability rating.",
         "series": _domain_series(frame, ["energy_score", "water_score", "waste_score", "air_score", "mobility_score", "assets_score", "safety_score", "emissions_score"]),
     })
     return result

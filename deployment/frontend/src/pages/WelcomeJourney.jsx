@@ -460,6 +460,7 @@ function WelcomeLanding({ isLight, selectedWorld, onSelectWorld, onEnter, onGoTo
 export default function WelcomeJourney() {
   const {
     login,
+    demoMode,
     PRESET_USERS,
     institutionType,
     setInstitutionType,
@@ -521,7 +522,6 @@ export default function WelcomeJourney() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeNav, setActiveNav] = useState(false);
   const [soundActive, setSoundActive] = useState(!sound.isMuted);
-  const {demoMode}=useDashboard();
   useEffect(()=>{if(demoMode){setEmail(PRESET_USERS.admin.email);setPassword(PRESET_USERS.admin.password);}},[demoMode]);
 
   const activeWorld = worlds.find(world => world.id === selectedWorld) || worlds[0];
@@ -568,10 +568,15 @@ export default function WelcomeJourney() {
     event.preventDefault();
     setIsSubmitting(true);
     setErrorMessage('');
+    // Read values from the form so browser password-manager autofill works
+    // even when it does not dispatch React change events for controlled fields.
+    const submitted = new FormData(event.currentTarget);
+    const submittedEmail = String(submitted.get('username') || email).trim();
+    const submittedPassword = String(submitted.get('password') || password);
       if (selectedWorld === 'intelligence') {
         setCurrentPage('insights');
       }
-      const success = await login(email, password);
+      const success = await login(submittedEmail, submittedPassword);
       setIsSubmitting(false);
       if (!success) setErrorMessage('Sign-in failed. Check your email and password.');
   };
@@ -840,7 +845,7 @@ export default function WelcomeJourney() {
               </div>
             </div>
 
-            <form className="journey-login-form" style={{ padding: '16px', background: 'rgba(14, 20, 17, 0.75)' }} onSubmit={handleSubmit}>
+            <form className="journey-login-form" autoComplete="on" style={{ padding: '16px', background: 'rgba(14, 20, 17, 0.75)' }} onSubmit={handleSubmit}>
               {demoMode&&<div className="journey-role-label">Choose a demo access role</div>}
               <div className="journey-roles" style={demoMode ? undefined : {display:'none'}} hidden={!demoMode}>
                 {roles.map((role) => {
@@ -863,12 +868,12 @@ export default function WelcomeJourney() {
               {errorMessage && <p className="journey-error" role="alert">{errorMessage}</p>}
               <label className="journey-field">
                 <span>Institution email</span>
-                <input type="email" value={email} onChange={event => setEmail(event.target.value)} required />
+                <input type="email" name="username" autoComplete="username" value={email} onChange={event => setEmail(event.target.value)} required />
               </label>
               <label className="journey-field">
                 <span>Password</span>
                 <span className="password-input-wrap">
-                  <input type={showPassword ? 'text' : 'password'} value={password} onChange={event => setPassword(event.target.value)} required />
+                  <input type={showPassword ? 'text' : 'password'} name="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required />
                   <button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>

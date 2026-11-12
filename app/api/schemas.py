@@ -64,7 +64,7 @@ def dashboard_payload(frames: dict[str, pd.DataFrame], alerts: list[dict[str, An
     air, assets, mobility = frames["air"], frames["assets"], frames["mobility"]
     safety, climate = frames["safety"], frames["climate"]
     score_frame = _latest(frames["sustainability"])
-    score = _num(sustainability_score(score_frame))
+    score = sustainability_score(score_frame)
     latest_energy, latest_water, latest_air = _latest(energy), _latest(water), _latest(air)
     latest_ops = _latest(frames["operations"])
     latest_weather = _latest(frames["weather"])
@@ -100,7 +100,8 @@ def dashboard_payload(frames: dict[str, pd.DataFrame], alerts: list[dict[str, An
     component_names = [("Energy", "energy_score", "energy"), ("Water", "water_score", "water"),
                        ("Waste", "waste_score", "waste"), ("Air · AQI", "air_score", "air"),
                        ("Mobility", "mobility_score", "mobility"), ("Assets", "assets_score", "assets"),
-                       ("Safety", "safety_score", "safety"), ("Climate", "climate_score", "climate")]
+                       ("Safety", "safety_score", "safety"), ("Climate", "climate_score", "climate"),
+                       ("Emissions", "emissions_score", "emissions")]
     factors = []
     for name, column, page in component_names:
         value = mean(score_frame, column)
@@ -114,7 +115,6 @@ def dashboard_payload(frames: dict[str, pd.DataFrame], alerts: list[dict[str, An
     co2e = total(frames["emissions"], "total_co2e")
     diversion = mean(waste, "diversion_rate") or 0
     return {
-        "pending_fields": {'overview.delta': 'pending phase 4', 'overview.complaints': 'pending phase 4', 'energy.deltaVsPrevWeek': 'pending phase 4', 'energy.avoidedTco2e': 'pending phase 4', 'energy.savingMwh': 'pending phase 4', 'water.deltaAvg': 'pending phase 4', 'water.dailySupplyM3': 'pending phase 4', 'water.leakAnomalyDelta': 'pending phase 4', 'waste.deltaVsLastWeek': 'pending phase 4', 'waste.routeSavingRsWeekly': 'pending phase 4', 'air.outlook': 'pending phase 4', 'assets.criticalTracked': 'pending phase 4', 'assets.failuresTrendPer100': 'pending phase 4', 'assets.calloutSavingRs': 'pending phase 4', 'safety.highRiskZones': 'pending phase 4', 'safety.inspectionsPercent': 'pending phase 4', 'climate.coolingLoadMw': 'pending phase 4', 'sustainability.grade': 'pending phase 4', 'sustainability.ghgEmissionsYearly': 'pending phase 4', 'actions.policyChecks': 'pending phase 4', 'insights.energyVariancePercent': 'pending phase 4'},
         "meta": {"generatedAt": context["as_of"].isoformat(), "filters": {"node": context["node"],
                  "start": context["start"].isoformat(), "end": context["end"].isoformat(),
                  "as_of": context["as_of"].isoformat()}},
@@ -166,7 +166,9 @@ def dashboard_payload(frames: dict[str, pd.DataFrame], alerts: list[dict[str, An
         "climate": {"heatRisk": mean(latest_climate, "heat_risk"), "floodRisk": mean(latest_climate, "flood_risk"), "preparednessIndex": round(_num(mean(latest_climate, "climate_readiness_score"))),
                     "heatIndexC": round(_num(weather.get("heat_index"))), "coolingLoadMw": 0,
                     "rainAlertMm": round(_num(weather.get("rainfall_6h_total"))), "rainAlertDuration": "6 hr"},
-        "sustainability": {"score": score, "grade": "", "ghgEmissionsYearly": 0,
+        "sustainability": {"score": score,
+                           "ghgEmissionsPeriodTco2e": round(total(frames["emissions"], "total_co2e") / 1000, 3),
+                           "periodDays": max(1, (context["end"].date() - context["start"].date()).days + 1),
                            "renewableElectricityPercent": round(total(energy, "solar_generation_kwh") / max(energy_kwh, 1) * 100, 1),
                            "wasteDivertedPercent": round(diversion * 100, 1), "openImprovementActions": len(open_actions)},
         "actions": {"openCount": len(open_actions), "inProgressCount": sum(a["status"] == "in_progress" for a in actions),

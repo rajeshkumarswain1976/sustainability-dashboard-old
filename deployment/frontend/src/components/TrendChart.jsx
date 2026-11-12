@@ -47,14 +47,6 @@ export default function TrendChart({ domain, compact = false }) {
   const selected = forecasts.find(item => item.entity_id === entity) || forecasts[0];
   const historical = state.history?.history.find(item => item.entity_id === selected?.entity_id)?.series || [];
   let { past, future, dotted, boundary } = trendLines(historical, selected?.series || [], forecastScope.as_of);
-  if (sourceDomain === 'sustainability' && past.length > 0 && future.length > 0) {
-    const lastVal = past.at(-1).value;
-    future = future.map((pt, i) => {
-      const gain = Math.min(2.4, (i + 1) * 0.32);
-      const val = +(lastVal + gain).toFixed(1);
-      return { ...pt, value: val, lower: +(val - 1.4).toFixed(1), upper: +(val + 1.4).toFixed(1) };
-    });
-  }
   const combined = [...past, ...future];
   const [ , label, unit] = options.find(item => item[0] === metric);
   const start = Math.min(boundary - 86400000, ...combined.map(point => timestamp(point.timestamp)));
@@ -79,7 +71,7 @@ export default function TrendChart({ domain, compact = false }) {
           <h3 className="text-sm font-bold text-white">{label} · Trend</h3>
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Live Ingestion Stream
+            Live synthetic feed
           </span>
           {past.length > 0 && (
             <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono bg-[#1E202B] text-dark-300 border border-[#2B2E3D]">
@@ -87,14 +79,14 @@ export default function TrendChart({ domain, compact = false }) {
             </span>
           )}
         </div>
-        <p className="text-xs text-dark-400 mt-1">Past readings and model forecast · {unit || 'measured value'}</p>
+        <p className="text-xs text-dark-400 mt-1">Past readings and model forecast · {unit || 'value'}</p>
       </div>
       <div className="flex gap-2">
         {options.length > 1 && <select aria-label="Chart metric" value={metric} onChange={event => { setMetric(event.target.value); setEntity(''); }} className="bg-[#191A24] text-dark-300 rounded-lg p-2 text-xs">{options.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>}
         {forecasts.length > 1 && <select aria-label="Chart location" value={selected?.entity_id || ''} onChange={event => setEntity(event.target.value)} className="bg-[#191A24] text-dark-300 rounded-lg p-2 text-xs max-w-40">{forecasts.map(item => <option key={item.entity_id} value={item.entity_id}>{item.entity_id}</option>)}</select>}
       </div>
     </div>
-    {state.error ? <p role="alert" className="text-xs text-rose-300">Trend unavailable: {state.error}. <button className="underline" onClick={() => setRetry(value => value + 1)}>Retry</button></p> : !state.forecast ? <p role="status" className="text-xs text-dark-400">Loading trend…</p> : !combined.length ? <p className="text-xs text-dark-400">No data at this level</p> : <>
+    {state.error ? <p role="alert" className="text-xs text-rose-300">Trend unavailable: {state.error}. <button className="underline" onClick={() => setRetry(value => value + 1)}>Retry</button></p> : !state.forecast ? <p role="status" className="text-xs text-dark-400">Loading trend…</p> : state.forecast.status === 'unavailable' ? <p role="status" className="text-xs text-dark-400">{state.forecast.availability_reason || 'This score is unavailable.'}</p> : !combined.length ? <p className="text-xs text-dark-400">No data at this level</p> : <>
       <div className="flex flex-wrap gap-5 text-[11px] text-dark-300"><span className="flex items-center gap-2"><i className="w-6 border-t-2 border-emerald-400" />Past readings</span><span className="flex items-center gap-2"><i className="w-6 border-t-2 border-dotted border-orange-400" />Forecast</span><span className="ml-auto">{selected?.entity_id}</span></div>
       <p className="text-[11px] text-dark-400">Source: {state.forecast.data_source?.classification?.replaceAll('_',' ')||'Unavailable'} · Method: {selected?.model||'Unavailable'} · Shaded range: model confidence interval; verified coverage</p>
       <div className="overflow-x-auto"><svg viewBox="0 0 900 280" className="w-full min-w-[600px]" role="img" aria-label={`${label}: solid historical line, today marker, and dotted forecast line`}>

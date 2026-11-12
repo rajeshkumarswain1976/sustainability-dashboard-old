@@ -3,6 +3,7 @@ import { useDashboard } from '../context/DashboardContext';
 import { api, USE_MOCK } from '../services/client';
 import ComplaintSummaryCard from '../components/ComplaintSummaryCard';
 import ActionAssignment from '../components/ActionAssignment';
+import { useScopedResource } from '../services/useScopedResource';
 import { 
   CheckSquare, 
   TrendingUp, 
@@ -18,6 +19,7 @@ import {
 
 export default function ActionsPage() {
   const { currentUser, showToast, filters, actions: serverActions, refreshOperational, decisionQueue } = useDashboard();
+  const complaintResource = useScopedResource(scope => api.complaints(scope));
   const [filterMode, setFilterMode] = useState('all');
   const [resolvedStatus, setResolvedStatus] = useState({});
   const policyChecks=serverActions.flatMap(action=>action.explanation?.applicability||[]);
@@ -101,7 +103,10 @@ export default function ActionsPage() {
     assignee: item.owner || 'Needs review', statusBadge: item.needs_review ? 'text-amber-400 bg-amber-500/15' : 'text-sky-400 bg-sky-500/15',
     needsHeadApproval: item.needs_head_approval,
   }));
-  const complaints = USE_MOCK ? mockComplaints : [];
+  const complaints = USE_MOCK ? mockComplaints : (complaintResource.data?.complaints || []).slice(0, 4).map(item => ({
+    id: item.id, cat: `${item.category || 'Report'} · ${item.node}`, reports: item.source === 'synthetic_demo' ? 'synthetic report' : '1 report',
+    desc: `${item.text} · ${new Date(item.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST`,
+  }));
   const statusCounts = USE_MOCK ? mockStatusCounts : [
     { label: 'Open', count: serverActions.filter(item => item.status === 'open').length, color: 'text-sky-400' },
     { label: 'Acknowledged', count: serverActions.filter(item => item.status === 'acknowledged').length, color: 'text-indigo-400' },
@@ -294,7 +299,7 @@ export default function ActionsPage() {
                 SERVICE SIGNALS · {complaints.length} OPEN
               </span>
               <h3 className="text-sm font-bold text-white">Complaint clusters</h3>
-              <div className="text-[11px] text-dark-400 mt-0.5">{USE_MOCK ? 'Reported complaints 6 in 3 clusters · Resolution SLA' : 'Complaint clusters pending Phase 4'}</div>
+              <div className="text-[11px] text-dark-400 mt-0.5">{USE_MOCK ? 'Reported complaints 6 in 3 clusters · Resolution SLA' : `${complaints.length} reports · synthetic reports are labeled`}</div>
             </div>
 
             <div className="space-y-2.5">
@@ -311,7 +316,11 @@ export default function ActionsPage() {
                   {/* PDF Rule: Staff cannot use Work order */}
                   {currentUser.role !== 'Staff' ? (
                     <button 
-                      onClick={() => showToast(`Work order created for ${c.cat}`)}
+                      onClick={async () => {
+                        if (USE_MOCK) { showToast(`Work order created for ${c.cat}`); return; }
+                        try { await api.complaintOperation(c.id, 'escalate', complaintResource.scope); await complaintResource.reload(); await refreshOperational(); showToast(`Review action created for ${c.cat}`); }
+                        catch (error) { showToast(error.message); }
+                      }}
                       className="px-2.5 py-1.5 bg-[#232635] hover:bg-brand-orange hover:text-white rounded-lg text-[11px] font-semibold text-white whitespace-nowrap transition cursor-pointer"
                     >
                       + Work order

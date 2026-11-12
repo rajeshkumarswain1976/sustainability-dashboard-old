@@ -1,6 +1,5 @@
 import CampusWeather from '../components/CampusWeather';
 import OperationalHotspots from '../components/OperationalHotspots';
-import ForecastPanel from '../components/ForecastPanel';
 import React, { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { USE_MOCK } from '../services/client';
@@ -73,8 +72,6 @@ export default function OverviewPage() {
 
   return (
     <div className="space-y-6">
-      {!USE_MOCK && <ForecastPanel domain="sustainability" />}
-
       {/* Title & Headline */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
@@ -123,19 +120,6 @@ export default function OverviewPage() {
             </p>
           </div>
 
-          {USE_MOCK && <div className="mt-6 pt-4 border-t border-white/20">
-            {/* Trend SVG Sparkline */}
-            <div className="h-14 w-full">
-              <svg viewBox="0 0 200 50" className="w-full h-full stroke-white fill-none stroke-[2.5]">
-                <path d="M0,40 Q30,35 60,30 T120,24 T160,18 L200,10" />
-                <circle cx="200" cy="10" r="4" className="fill-white" />
-              </svg>
-            </div>
-            <div className="text-[11px] text-white/80 mt-2 flex justify-between items-center">
-              <span>Six-week trend · Improving</span>
-              <span className="font-mono text-[10px]">28 Aug → Today 9 Oct</span>
-            </div>
-          </div>}
         </div>
 
         {/* Campus Health Factors Grid */}

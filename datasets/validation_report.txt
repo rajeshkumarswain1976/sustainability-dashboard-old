@@ -1,60 +1,37 @@
-PASS  occupancy_hourly.csv: rows = 7 units x 1296 hours  9072
-PASS  occupancy_hourly.csv: no duplicate keys  
-PASS  occupancy_floor_hourly.csv: rows = 28 units x 1296 hours  36288
-PASS  occupancy_floor_hourly.csv: no duplicate keys  
-PASS  weather.csv: rows = 1 units x 1296 hours  1296
-PASS  weather.csv: no duplicate keys  
-PASS  energy_building_hourly.csv: rows = 7 units x 1296 hours  9072
-PASS  energy_building_hourly.csv: no duplicate keys  
-PASS  energy_floor_hourly.csv: rows = 28 units x 1296 hours  36288
-PASS  energy_floor_hourly.csv: no duplicate keys  
-PASS  water_hourly.csv: rows = 15 units x 1296 hours  19440
-PASS  water_hourly.csv: no duplicate keys  
-PASS  water_tank_levels.csv: rows = 3 units x 1296 hours  3888
-PASS  water_tank_levels.csv: no duplicate keys  
-PASS  water_resources.csv: rows = 1 units x 1296 hours  1296
-PASS  water_resources.csv: no duplicate keys  
-PASS  waste_hourly.csv: rows = 57 units x 1296 hours  73872
-PASS  waste_hourly.csv: no duplicate keys  
-PASS  traffic_parking.csv: rows = 3 units x 1296 hours  3888
-PASS  traffic_parking.csv: no duplicate keys  
-PASS  assets_equipment.csv: rows = 38 units x 1296 hours  49248
-PASS  assets_equipment.csv: no duplicate keys  
-PASS  climate_resilience.csv: rows = 6 units x 1296 hours  7776
-PASS  climate_resilience.csv: no duplicate keys  
-PASS  air_environment.csv: rows = 2 units x 1296 hours  2592
-PASS  air_environment.csv: no duplicate keys  
-PASS  emissions.csv: rows = 28 units x 1296 hours  36288
-PASS  emissions.csv: no duplicate keys  
-PASS  campus_operations.csv: rows = 1 units x 1296 hours  1296
-PASS  campus_operations.csv: no duplicate keys  
-PASS  occupancy: floors sum to building every hour  
-PASS  occupancy: never above capacity  
-PASS  energy: floors sum to building  
-PASS  energy: grid import within 0..energy  
-PASS  water: tank levels within capacity  
-PASS  water: meters add to campus total  
-PASS  waste: fill 0..100  
-PASS  traffic: parking within capacity  
-PASS  traffic: classes sum to vehicle count  
-PASS  assets: utilisation 0..1  
-PASS  assets: load never above floor kWh  
-PASS  emissions: total = parts  
-PASS  location tree: parents exist  
-WARN  energy: scripted +18% event flagged  
-PASS  energy: flags outside event below 1%  0.39%
-PASS  waste: bins full (overflow state) 3-8% of bin-hours  5.80%
-PASS  water: litres per person per day 40-200  118
-PASS  water: leak flagged only for Hall C on 2026-10-09  {'M03': 3}
-PASS  assets: at least 3 failures  
-PASS  safety: N2 has the most incidents  
-PASS  weather, air and climate series populated  
-PASS  anonymisation scan  
+Synthetic campus simulation validation inputs
+Seed: 20261111
+Window: 2025-11-11T00:00:00+05:30 through 2026-11-10T23:00:00+05:30 (Asia/Kolkata)
+Template SHA-256: 813540330d2639fb198fbf629d8752a1f076a2221ca2817b6b93b11193611cd4
+Source profiles are frozen synthetic examples; no measured campus observations were used.
+Energy anomaly windows are synthetic +18% excursions synchronized to signals_energy.csv.
+Weather seasonal offset: annual temperature cosine about day 200 plus hourly cycle; rainfall is concentrated in the modeled monsoon window (days 160–305). Heat risk = clamp((Steadman/Rothfusz heat index in C - 27) * 5, 0, 100); flood risk = clamp(max(rainfall_6h/6, rainfall*0.4)*50*exposure*(1+low_lying)/(10+0.5*drainage_capacity), 0, 100). Sustainability factor scores are within-window empirical percentile ranks, and the composite is their equal-weight mean; the result is a relative synthetic index, not a certified rating. Climate readiness remains unavailable without a supported formula.
 
-hours: 1296
-energy coverage window saved in private/source_map.json
-weather from API: False
-weather fully populated: True
-air from API: False
-air fully populated: True
-assets: 38  bins: 57  incidents: 48
+PASS air_environment.csv: 17520 rows
+PASS assets_equipment.csv: 332880 rows
+PASS campus_operations.csv: 8760 rows
+PASS climate_resilience.csv: 52560 rows
+PASS emissions.csv: 245280 rows
+PASS energy_building_hourly.csv: 61320 rows
+PASS energy_floor_hourly.csv: 245280 rows
+PASS inspections.csv: 400 rows
+PASS location_dim.csv: 42 rows
+PASS occupancy_floor_hourly.csv: 245280 rows
+PASS occupancy_hourly.csv: 61320 rows
+PASS registry_assets.csv: 38 rows
+PASS registry_bins.csv: 57 rows
+PASS registry_buildings.csv: 7 rows
+PASS registry_emission_factors.csv: 4 rows
+PASS registry_floors.csv: 28 rows
+PASS registry_meters.csv: 15 rows
+PASS registry_outdoor_areas.csv: 3 rows
+PASS registry_tanks.csv: 3 rows
+PASS registry_zones_climate.csv: 6 rows
+PASS safety_incidents.csv: 324 rows
+PASS signals_energy.csv: 7 rows
+PASS sustainability.csv: 365 rows
+PASS traffic_parking.csv: 26280 rows
+PASS waste_hourly.csv: 499320 rows
+PASS water_hourly.csv: 131400 rows
+PASS water_resources.csv: 8760 rows
+PASS water_tank_levels.csv: 26280 rows
+PASS weather.csv: 8760 rows

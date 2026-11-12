@@ -228,7 +228,8 @@ export function DashboardProvider({ children }) {
     setIsAuthenticated(true);
     setDashboardData(null);setActions([]);setDecisionQueue([]);setNotifications([]);
   };
-  useEffect(()=>{if(!USE_MOCK)api.authMe().then(applySession).catch(()=>{});},[]);
+  // Start at the welcome page on every load; authenticate only after the user
+  // enters the portal and submits the sign-in form.
 
   useEffect(() => {
     if (USE_MOCK || !isAuthenticated) return;
@@ -336,14 +337,25 @@ export function DashboardProvider({ children }) {
     requestsInFlight.current++;
     setIsLoading(true);
     setLoadError(null);
-    const windowKey = JSON.stringify([node, filters.snapshotDate, filters.period]);
-    if (loadedWindow.current !== windowKey) setDashboardData(null);
+    const windowKey = JSON.stringify([currentUser.key, node, filters.snapshotDate, filters.period]);
+    const cacheKey = `agenexus-dashboard-v2:${windowKey}`;
+    let restored = false;
+    try {
+      const cached = JSON.parse(window.localStorage.getItem(cacheKey) || 'null');
+      if (cached?.data && Date.now() - cached.savedAt < 24 * 60 * 60 * 1000) {
+        setDashboardData(cached.data);
+        loadedWindow.current = windowKey;
+        restored = true;
+      }
+    } catch {}
+    if (!restored && loadedWindow.current !== windowKey) setDashboardData(null);
 
     fetchDashboardData({ ...filters, node, as_of: replayState?.running ? replayState.cursor : undefined })
       .then((data) => {
         if (isMounted) {
           setDashboardData(data);
           loadedWindow.current = windowKey;
+          try { window.localStorage.setItem(cacheKey, JSON.stringify({ savedAt: Date.now(), data })); } catch {}
           setForecastScope({ node, as_of: data.window?.as_of || new Date().toISOString(), start: data.window?.start, end: data.window?.effective_end || data.window?.end });
           if (!USE_MOCK) {
             refreshOperational(data.window?.as_of).catch(() => {});
@@ -368,7 +380,10 @@ export function DashboardProvider({ children }) {
     return () => {
       isMounted = false;
     };
-  }, [filters, node, refreshVersion, replayState?.running, streamVersion,isAuthenticated]);
+  // Do not refetch the full multi-domain dashboard when the lightweight replay
+  // state arrives after login. The first request is already aligned to the
+  // current replay calendar; stream ticks refresh it from then on.
+  }, [filters, node, refreshVersion, streamVersion, isAuthenticated, currentUser.key]);
 
   const updateFilter = (key, value) => {
     setFilters(prev => key === 'node' ? { ...prev, node: value, location: locations.find(item => item.node_id === value)?.label || value } : { ...prev, [key]: value });
@@ -488,4 +503,8 @@ export function useDashboard() {
     throw new Error('useDashboard must be used within a DashboardProvider');
   }
   return context;
+}
+
+export function useOptionalDashboard() {
+  return useContext(DashboardContext);
 }
